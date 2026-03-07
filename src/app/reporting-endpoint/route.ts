@@ -1,13 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { NodeRequestBody } from "@/schemas/node.schema";
-
+import * as z from "zod";
+import supabase from "@/lib/supabaseClient";
 
 export async function POST(req: NextRequest) {
   const body: NodeRequestBody = await req.json();
   const parsedBody = NodeRequestBody.safeParse(body);
-  //   console.log(parsedBody);
+  const now = Date.now();
+
   if (!parsedBody.success) {
-    return NextResponse.json(parsedBody, { status: 400 });
+    const { error, ...rest } = parsedBody;
+    return NextResponse.json({ error: z.flattenError(error), ...rest }, { status: 400 });
   }
-  return NextResponse.json(parsedBody, { status: 200 });
+
+  const payload = {
+    timestamp: parsedBody.data.timestamp ?? now,
+    node_id: parsedBody.data.nodeID,
+    temp: parsedBody.data.temp,
+    hum: parsedBody.data.hum,
+    pitch: parsedBody.data.pitch,
+    roll: parsedBody.data.roll,
+    smoke_analog: parsedBody.data.smokeAnalog,
+    smoke_digital: parsedBody.data.smokeDigital,
+    danger: parsedBody.data.danger,
+  } as Record<string, unknown>;
+
+  try {
+    // Insert into a table named `node_reports`. Create this table in Supabase with matching columns.
+    const { data, error } = await supabase.from("node_reports").insert([payload]);
+    if (error) {
+      console.error(error)
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    return NextResponse.json({ success: true, data }, { status: 200 });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message ?? "Unknown error" }, { status: 500 });
+  }
 }
