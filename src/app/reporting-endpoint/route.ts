@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { NodeRequestBody } from "@/schemas/node.schema";
 import * as z from "zod";
-import supabase from "@/lib/supabaseClient";
+import supabase from "@/lib/supabaseAdmin";
 
 export async function POST(req: NextRequest) {
-  const body: NodeRequestBody = await req.json();
+  let body;
+  try {
+    body = await req.json();
+    console.log("📥 Received report:", JSON.stringify(body, null, 2));
+  } catch (err) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
   const parsedBody = NodeRequestBody.safeParse(body);
   const now = Date.now();
 
