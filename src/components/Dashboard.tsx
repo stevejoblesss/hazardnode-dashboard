@@ -10,11 +10,11 @@ import {
   Compass, 
   Wind, 
   ShieldCheck,
-  History
+  History,
+  LayoutGrid,
+  Zap
 } from "lucide-react";
 import { 
-  LineChart, 
-  Line, 
   XAxis, 
   YAxis, 
   CartesianGrid, 
@@ -46,7 +46,6 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Initial fetch
     async function fetchInitialData() {
       const { data, error } = await supabase
         .from("node_reports")
@@ -58,8 +57,6 @@ export default function Dashboard() {
         console.error("Error fetching reports:", error);
       } else {
         setReports(data || []);
-        
-        // Update current node status map
         const latestNodes: Record<number, NodeReport> = {};
         data?.forEach((report) => {
           if (!latestNodes[report.node_id]) {
@@ -73,7 +70,6 @@ export default function Dashboard() {
 
     fetchInitialData();
 
-    // Subscribe to real-time updates
     const channel = supabase
       .channel("node_reports_changes")
       .on(
@@ -100,190 +96,215 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-black text-white">
+      <div className="flex h-screen items-center justify-center bg-[#0a0a0a] text-[#f4f4f5]">
         <div className="flex flex-col items-center gap-4">
-          <Activity className="h-12 w-12 animate-pulse text-red-500" />
-          <p className="text-xl font-medium">Initializing HazardNode...</p>
+          <Zap className="h-8 w-8 animate-pulse text-blue-500" />
+          <p className="text-sm font-medium tracking-tight">Initializing HazardNode Systems...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black p-4 text-zinc-100 md:p-8">
-      {/* Header */}
-      <header className="mb-8 flex flex-col justify-between gap-4 border-b border-zinc-800 pb-6 md:flex-row md:items-center">
+    <div className="min-h-screen bg-[#0a0a0a] p-6 text-[#f4f4f5] md:p-10">
+      {/* Header Section */}
+      <header className="mb-10 flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
-          <h1 className="text-4xl font-bold tracking-tighter text-white">
-            HAZARD<span className="text-red-600">NODE</span>
+          <div className="flex items-center gap-2 mb-1">
+            <LayoutGrid className="h-4 w-4 text-blue-500" />
+            <span className="text-[10px] font-bold tracking-[0.2em] text-zinc-500 uppercase">Mission Control</span>
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight text-white">
+            HazardNode <span className="text-zinc-500 font-medium">Dashboard</span>
           </h1>
-          <p className="mt-1 text-zinc-400">Real-time sensor network monitoring</p>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <div className={cn(
-            "flex items-center gap-2 rounded-full px-4 py-1 text-sm font-semibold",
-            dangerNodes.length > 0 ? "bg-red-500/20 text-red-500 animate-pulse" : "bg-green-500/20 text-green-500"
+            "flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold shadow-subtle border transition-colors duration-500",
+            dangerNodes.length > 0 
+              ? "bg-red-500/10 border-red-500/50 text-red-500 animate-pulse" 
+              : "bg-emerald-500/10 border-emerald-500/50 text-emerald-400"
           )}>
-            {dangerNodes.length > 0 ? (
-              <AlertTriangle className="h-4 w-4" />
-            ) : (
-              <ShieldCheck className="h-4 w-4" />
-            )}
-            {dangerNodes.length > 0 ? `${dangerNodes.length} NODES IN DANGER` : "SYSTEM SECURE"}
+            {dangerNodes.length > 0 ? <AlertTriangle className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+            {dangerNodes.length > 0 ? `${dangerNodes.length} ALERTS ACTIVE` : "SYSTEM NOMINAL"}
           </div>
-          <div className="flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-1 text-sm text-zinc-400">
-            <Activity className="h-4 w-4 text-zinc-500" />
-            {activeNodes.length} ACTIVE NODES
+          <div className="flex items-center gap-2 rounded-md bg-zinc-900/50 border border-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-400 shadow-subtle">
+            <Activity className="h-3.5 w-3.5 text-blue-500" />
+            {activeNodes.length} NODES ONLINE
           </div>
         </div>
       </header>
 
-      {/* Grid Layout */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      {/* Main Grid */}
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
         
-        {/* Active Nodes Column */}
-        <div className="space-y-6 lg:col-span-1">
-          <h2 className="flex items-center gap-2 text-xl font-semibold text-white">
-            <Activity className="h-5 w-5 text-red-500" /> Node Status
-          </h2>
-          <div className="space-y-4">
+        {/* Node Grid - Left Side */}
+        <div className="lg:col-span-8 space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Active Sensor Nodes</h2>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {activeNodes.map((node) => (
               <div 
                 key={node.node_id} 
                 className={cn(
-                  "relative overflow-hidden rounded-xl border p-4 transition-all hover:scale-[1.02]",
-                  node.danger ? "border-red-500 bg-red-950/20" : "border-zinc-800 bg-zinc-900/50"
+                  "group relative rounded-lg border p-5 transition-all duration-300 shadow-subtle hover:translate-y-[-2px]",
+                  node.danger 
+                    ? "border-red-500/50 bg-red-500/5 hover:bg-red-500/10" 
+                    : "border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900/60 hover:border-zinc-700"
                 )}
               >
-                <div className="mb-3 flex items-start justify-between">
+                <div className="flex items-start justify-between mb-6">
                   <div>
-                    <h3 className="text-lg font-bold text-white">Node #{node.node_id}</h3>
-                    <p className="text-xs text-zinc-500">
-                      Last seen: {format(new Date(node.inserted_at), "HH:mm:ss")}
-                    </p>
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Device Unit</span>
+                    <h3 className="text-xl font-bold text-white">Node {String(node.node_id).padStart(2, '0')}</h3>
                   </div>
-                  {node.danger && (
-                    <div className="rounded bg-red-600 px-2 py-1 text-[10px] font-bold text-white uppercase tracking-wider animate-pulse">
-                      DANGER
+                  <div className="text-right">
+                    <span className="text-[10px] font-medium text-zinc-500 block mb-1 uppercase">Connectivity</span>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                      <span className="text-[11px] font-mono text-zinc-400">
+                        {format(new Date(node.inserted_at), "HH:mm:ss")}
+                      </span>
                     </div>
-                  )}
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center gap-2">
-                    <div className="rounded-lg bg-zinc-800 p-2 text-zinc-400">
-                      <Thermometer className="h-4 w-4" />
+                <div className="grid grid-cols-2 gap-y-6 gap-x-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-zinc-500">
+                      <Thermometer className="h-3 w-3" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wider">Temperature</span>
                     </div>
-                    <div>
-                      <p className="text-[10px] text-zinc-500 uppercase">Temp</p>
-                      <p className="font-semibold text-white">{node.temp}°C</p>
-                    </div>
+                    <p className="text-2xl font-semibold tracking-tight text-white">{node.temp}<span className="text-sm text-zinc-500 ml-0.5">°C</span></p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="rounded-lg bg-zinc-800 p-2 text-zinc-400">
-                      <Droplets className="h-4 w-4" />
+                  
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-zinc-500">
+                      <Droplets className="h-3 w-3" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wider">Humidity</span>
                     </div>
-                    <div>
-                      <p className="text-[10px] text-zinc-500 uppercase">Hum</p>
-                      <p className="font-semibold text-white">{node.hum}%</p>
-                    </div>
+                    <p className="text-2xl font-semibold tracking-tight text-white">{node.hum}<span className="text-sm text-zinc-500 ml-0.5">%</span></p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="rounded-lg bg-zinc-800 p-2 text-zinc-400">
-                      <Compass className="h-4 w-4" />
+
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-zinc-500">
+                      <Compass className="h-3 w-3" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wider">Orientation</span>
                     </div>
-                    <div>
-                      <p className="text-[10px] text-zinc-500 uppercase">Pitch/Roll</p>
-                      <p className="font-semibold text-white text-xs">{Math.round(node.pitch)}° / {Math.round(node.roll)}°</p>
-                    </div>
+                    <p className="text-sm font-medium text-white font-mono">
+                      P: {node.pitch.toFixed(1)}° <span className="text-zinc-600 mx-1">/</span> R: {node.roll.toFixed(1)}°
+                    </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="rounded-lg bg-zinc-800 p-2 text-zinc-400">
-                      <Wind className="h-4 w-4" />
+
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-zinc-500">
+                      <Wind className="h-3 w-3" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wider">Smoke Analysis</span>
                     </div>
-                    <div>
-                      <p className="text-[10px] text-zinc-500 uppercase">Smoke</p>
-                      <p className={cn("font-semibold", node.smoke_digital ? "text-red-400" : "text-white")}>
-                        {node.smoke_digital ? "DETECTED" : "CLEAR"}
-                      </p>
-                    </div>
+                    <p className={cn(
+                      "text-xs font-bold uppercase tracking-widest",
+                      node.smoke_digital ? "text-red-400" : "text-emerald-400"
+                    )}>
+                      {node.smoke_digital ? "CRITICAL ALERT" : "ATMOSPHERE CLEAR"}
+                    </p>
                   </div>
+                </div>
+                
+                {/* Subtle progress indicator for smoke analog level */}
+                <div className="mt-6 h-1 w-full bg-zinc-800 rounded-full overflow-hidden">
+                  <div 
+                    className={cn(
+                      "h-full transition-all duration-1000",
+                      node.smoke_analog > 500 ? "bg-red-500" : "bg-blue-500"
+                    )}
+                    style={{ width: `${Math.min(100, (node.smoke_analog / 1024) * 100)}%` }}
+                  />
                 </div>
               </div>
             ))}
-            {activeNodes.length === 0 && (
-              <div className="rounded-xl border border-dashed border-zinc-800 p-8 text-center text-zinc-500">
-                Waiting for node data...
-              </div>
-            )}
           </div>
         </div>
 
-        {/* Charts Column */}
-        <div className="space-y-6 lg:col-span-2">
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-6">
-            <h2 className="mb-6 flex items-center gap-2 text-xl font-semibold text-white">
-              <Thermometer className="h-5 w-5 text-orange-500" /> Temperature Trend
+        {/* Analytics - Right Side */}
+        <div className="lg:col-span-4 space-y-8">
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/20 p-6 shadow-subtle">
+            <h2 className="mb-6 text-sm font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+              <Activity className="h-3.5 w-3.5 text-blue-500" /> System Telemetry
             </h2>
-            <div className="h-[300px] w-full">
+            <div className="h-[220px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={[...reports].reverse()}>
                   <defs>
                     <linearGradient id="colorTemp" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f97316" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#f97316" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#18181b" vertical={false} />
                   <XAxis 
                     dataKey="inserted_at" 
                     tickFormatter={(time) => format(new Date(time), "HH:mm")}
-                    stroke="#52525b"
-                    fontSize={12}
+                    stroke="#3f3f46"
+                    fontSize={10}
+                    tickLine={false}
+                    axisLine={false}
                   />
-                  <YAxis stroke="#52525b" fontSize={12} unit="°C" />
+                  <YAxis 
+                    stroke="#3f3f46" 
+                    fontSize={10} 
+                    tickLine={false}
+                    axisLine={false}
+                    unit="°"
+                  />
                   <Tooltip 
-                    contentStyle={{ backgroundColor: "#18181b", borderColor: "#27272a", color: "#fff" }}
+                    contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", color: "#f4f4f5", borderRadius: "6px", fontSize: "11px", boxShadow: "0 10px 15px -3px rgba(0,0,0,0.5)" }}
                     labelFormatter={(label) => format(new Date(label), "HH:mm:ss")}
                   />
                   <Area 
                     type="monotone" 
                     dataKey="temp" 
-                    stroke="#f97316" 
-                    strokeWidth={2}
+                    stroke="#3b82f6" 
+                    strokeWidth={1.5}
                     fillOpacity={1} 
                     fill="url(#colorTemp)" 
+                    animationDuration={1500}
                   />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-6">
-            <h2 className="mb-6 flex items-center gap-2 text-xl font-semibold text-white">
-              <History className="h-5 w-5 text-blue-500" /> Recent Activity Log
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/20 p-6 shadow-subtle">
+            <h2 className="mb-4 text-sm font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+              <History className="h-3.5 w-3.5 text-blue-500" /> Event Stream
             </h2>
-            <div className="max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-              <div className="space-y-2">
-                {reports.slice(0, 20).map((report) => (
-                  <div key={report.id} className="flex items-center justify-between border-b border-zinc-800/50 py-2 text-sm">
-                    <div className="flex items-center gap-3">
-                      <span className={cn(
-                        "h-2 w-2 rounded-full",
-                        report.danger ? "bg-red-500 animate-pulse" : "bg-green-500"
-                      )} />
-                      <span className="font-mono text-zinc-500">
-                        [{format(new Date(report.inserted_at), "HH:mm:ss")}]
-                      </span>
-                      <span className="text-zinc-300">Node #{report.node_id}</span>
-                    </div>
-                    <div className="text-zinc-500">
-                      T: {report.temp}°C | H: {report.hum}% | S: {report.smoke_digital ? "⚠️" : "OK"}
-                    </div>
+            <div className="space-y-3 max-h-[380px] overflow-y-auto pr-2 custom-scrollbar">
+              {reports.slice(0, 15).map((report) => (
+                <div key={report.id} className="group flex flex-col gap-1.5 border-l-2 border-zinc-800 pl-4 py-1 transition-colors hover:border-blue-500/50">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono text-zinc-500">
+                      {format(new Date(report.inserted_at), "HH:mm:ss.SS")}
+                    </span>
+                    <span className={cn(
+                      "text-[9px] font-bold px-1.5 py-0.5 rounded",
+                      report.danger ? "bg-red-500/10 text-red-400" : "bg-zinc-800 text-zinc-400"
+                    )}>
+                      NODE {report.node_id}
+                    </span>
                   </div>
-                ))}
-              </div>
+                  <p className="text-[11px] text-zinc-300">
+                    Sensor payload received: <span className="text-zinc-500">{report.temp}°C / {report.hum}% RH</span>
+                  </p>
+                </div>
+              ))}
+              {reports.length === 0 && (
+                <div className="py-10 text-center">
+                  <p className="text-xs text-zinc-600">Waiting for incoming telemetry stream...</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -292,17 +313,25 @@ export default function Dashboard() {
 
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar {
-          width: 4px;
+          width: 3px;
         }
         .custom-scrollbar::-webkit-scrollbar-track {
-          background: #18181b;
+          background: transparent;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #3f3f46;
+          background: #27272a;
           border-radius: 10px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #52525b;
+          background: #3f3f46;
+        }
+        
+        @keyframes subtle-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.8; }
+        }
+        .animate-subtle-pulse {
+          animation: subtle-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
         }
       `}</style>
     </div>
