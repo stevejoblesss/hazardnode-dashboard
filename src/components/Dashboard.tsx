@@ -44,6 +44,7 @@ export default function Dashboard() {
   const [reports, setReports] = useState<NodeReport[]>([]);
   const [nodes, setNodes] = useState<Record<number, NodeReport>>({});
   const [loading, setLoading] = useState(true);
+  const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "error">("connecting");
 
   useEffect(() => {
     async function fetchInitialData() {
@@ -55,8 +56,11 @@ export default function Dashboard() {
 
       if (error) {
         console.error("Error fetching reports:", error);
+        setConnectionStatus("error");
       } else {
+        console.log("✅ Initial data fetched:", data?.length, "reports");
         setReports(data || []);
+        setConnectionStatus("connected");
         const latestNodes: Record<number, NodeReport> = {};
         data?.forEach((report) => {
           if (!latestNodes[report.node_id]) {
@@ -76,15 +80,25 @@ export default function Dashboard() {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "node_reports" },
         (payload) => {
-          const newReport = payload.new as NodeReport;
-          setReports((prev) => [newReport, ...prev].slice(0, 100));
-          setNodes((prev) => ({
-            ...prev,
-            [newReport.node_id]: newReport
-          }));
+          console.log("🔥 New report received via Realtime:", payload.new);
+          if (payload.new && "node_id" in payload.new) {
+            const newReport = payload.new as NodeReport;
+            setReports((prev) => [newReport, ...prev].slice(0, 100));
+            setNodes((prev) => ({
+              ...prev,
+              [newReport.node_id]: newReport
+            }));
+          } else {
+            console.warn("⚠️ Received incomplete report via Realtime:", payload);
+          }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log("📡 Subscription status:", status);
+        if (status === "CHANNEL_ERROR") {
+          console.error("❌ Failed to connect to Realtime channel. Check if Realtime is enabled for 'node_reports' table.");
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -130,8 +144,11 @@ export default function Dashboard() {
             {dangerNodes.length > 0 ? `${dangerNodes.length} ALERTS ACTIVE` : "SYSTEM NOMINAL"}
           </div>
           <div className="flex items-center gap-2 rounded-md bg-zinc-900/50 border border-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-400 shadow-subtle">
-            <Activity className="h-3.5 w-3.5 text-blue-500" />
-            {activeNodes.length} NODES ONLINE
+            <Activity className={cn(
+              "h-3.5 w-3.5",
+              connectionStatus === "connected" ? "text-blue-500" : connectionStatus === "error" ? "text-red-500" : "text-zinc-500"
+            )} />
+            {connectionStatus === "connected" ? `${activeNodes.length} NODES ONLINE` : connectionStatus === "error" ? "CONNECTION ERROR" : "CONNECTING..."}
           </div>
         </div>
       </header>
@@ -152,7 +169,7 @@ export default function Dashboard() {
                 className={cn(
                   "group relative rounded-lg border p-5 transition-all duration-300 shadow-subtle hover:translate-y-[-2px]",
                   node.danger 
-                    ? "border-red-500/50 bg-red-500/5 hover:bg-red-500/10" 
+                    ? "border-red-500/50 bg-red-500/5 hover:bg-red-5  00/10" 
                     : "border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900/60 hover:border-zinc-700"
                 )}
               >
