@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: z.flattenError(error), ...rest }, { status: 400 });
   }
 
-  const payload = {
+  const payload: Record<string, any> = {
     timestamp: parsedBody.data.timestamp ?? now,
     node_id: parsedBody.data.nodeID,
     temp: parsedBody.data.temp,
@@ -71,11 +71,12 @@ export async function POST(req: NextRequest) {
     smoke_analog: parsedBody.data.smokeAnalog,
     smoke_digital: parsedBody.data.smokeDigital,
     danger: parsedBody.data.danger,
-    // Edge Impulse AI Features
-    ai_label: parsedBody.data.aiLabel,
-    ai_confidence: parsedBody.data.aiConfidence,
-    ai_anomaly: parsedBody.data.aiAnomaly,
-  } as Record<string, unknown>;
+  };
+
+  // Only include Edge Impulse AI Features if they are present in the request
+  if (parsedBody.data.aiLabel !== undefined) payload.ai_label = parsedBody.data.aiLabel;
+  if (parsedBody.data.aiConfidence !== undefined) payload.ai_confidence = parsedBody.data.aiConfidence;
+  if (parsedBody.data.aiAnomaly !== undefined) payload.ai_anomaly = parsedBody.data.aiAnomaly;
 
   try {
     // Insert into a table named `node_reports`. Create this table in Supabase with matching columns.

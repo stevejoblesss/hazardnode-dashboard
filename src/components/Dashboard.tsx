@@ -236,7 +236,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* Edge AI Insights Section */}
-                {(node.ai_label || node.ai_anomaly !== undefined) && (
+                {(node.ai_label || (node.ai_anomaly != null)) && (
                   <div className="mt-6 pt-4 border-t border-zinc-800/50">
                     <div className="flex items-center gap-2 mb-3">
                       <Brain className="h-3.5 w-3.5 text-blue-400" />
@@ -251,7 +251,7 @@ export default function Dashboard() {
                             <span className="text-xs font-bold text-white uppercase bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded">
                               {node.ai_label}
                             </span>
-                            {node.ai_confidence !== undefined && (
+                            {node.ai_confidence != null && (
                               <span className="text-[10px] font-mono text-zinc-500">
                                 {Math.round(node.ai_confidence * 100)}%
                               </span>
@@ -260,7 +260,7 @@ export default function Dashboard() {
                         </div>
                       )}
                       
-                      {node.ai_anomaly !== undefined && (
+                      {node.ai_anomaly != null && (
                         <div className="space-y-1">
                           <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider block">Anomaly Score</span>
                           <div className="flex items-center gap-2">
