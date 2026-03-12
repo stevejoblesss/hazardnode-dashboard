@@ -12,7 +12,9 @@ import {
   ShieldCheck,
   History,
   LayoutGrid,
-  Zap
+  Zap,
+  Brain,
+  Cpu
 } from "lucide-react";
 import { 
   XAxis, 
@@ -37,6 +39,9 @@ interface NodeReport {
   smoke_analog: number;
   smoke_digital: boolean;
   danger: boolean;
+  ai_label?: string;
+  ai_confidence?: number;
+  ai_anomaly?: number;
   inserted_at: string;
 }
 
@@ -229,6 +234,57 @@ export default function Dashboard() {
                     </p>
                   </div>
                 </div>
+
+                {/* Edge AI Insights Section */}
+                {(node.ai_label || node.ai_anomaly !== undefined) && (
+                  <div className="mt-6 pt-4 border-t border-zinc-800/50">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Brain className="h-3.5 w-3.5 text-blue-400" />
+                      <span className="text-[10px] font-bold text-blue-400/80 uppercase tracking-[0.2em]">Edge AI Inference</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      {node.ai_label && (
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider block">Classification</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-white uppercase bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded">
+                              {node.ai_label}
+                            </span>
+                            {node.ai_confidence !== undefined && (
+                              <span className="text-[10px] font-mono text-zinc-500">
+                                {Math.round(node.ai_confidence * 100)}%
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {node.ai_anomaly !== undefined && (
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider block">Anomaly Score</span>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden max-w-[60px]">
+                              <div 
+                                className={cn(
+                                  "h-full transition-all duration-500",
+                                  node.ai_anomaly > 0.5 ? "bg-amber-500" : "bg-emerald-500"
+                                )}
+                                style={{ width: `${Math.min(100, node.ai_anomaly * 100)}%` }}
+                              />
+                            </div>
+                            <span className={cn(
+                              "text-[10px] font-mono font-bold",
+                              node.ai_anomaly > 0.5 ? "text-amber-400" : "text-emerald-400"
+                            )}>
+                              {node.ai_anomaly.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 
                 {/* Subtle progress indicator for smoke analog level */}
                 <div className="mt-6 h-1 w-full bg-zinc-800 rounded-full overflow-hidden">
