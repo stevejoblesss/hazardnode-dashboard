@@ -10,10 +10,6 @@ export const NodeRequestBody = z.object({
   smokeAnalog: z.number(),
   smokeDigital: z.boolean(),
   danger: z.boolean(),
-  // Edge Impulse AI Features
-  aiLabel: z.string().optional(),
-  aiConfidence: z.number().optional(),
-  aiAnomaly: z.number().optional(),
 });
 
 export type NodeRequestBody = z.infer<typeof NodeRequestBody>;
