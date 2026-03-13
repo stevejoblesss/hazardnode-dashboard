@@ -50,7 +50,7 @@ export default function Dashboard() {
   const [reports, setReports] = useState<NodeReport[]>([]);
   const [nodes, setNodes] = useState<Record<number, NodeReport>>({});
   const [loading, setLoading] = useState(true);
-  const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "error">("connecting");
+  const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "error" | "reconnecting">("connecting");
   const [aiPredictions, setAiPredictions] = useState<Record<number, AIPrediction>>({});
 
   // Fetch AI prediction from our new endpoint
@@ -59,7 +59,13 @@ export default function Dashboard() {
       const res = await fetch(`/api/ai?nodeId=${nodeId}`);
       if (res.ok) {
         const data = await res.json();
-        setAiPredictions(prev => ({ ...prev, [nodeId]: data }));
+        setAiPredictions(prev => {
+          // Only update if the prediction has changed or is newer
+          if (prev[nodeId]?.prediction === data.prediction && prev[nodeId]?.confidence === data.confidence) {
+            return prev;
+          }
+          return { ...prev, [nodeId]: data };
+        });
       }
     } catch (err) {
       console.error("AI prediction fetch failed:", err);
@@ -67,7 +73,12 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    async function fetchInitialData() {
+    let channel: any;
+
+    async function initializeDashboard() {
+      setConnectionStatus("connecting");
+      
+      // 1. Fetch initial data
       const { data, error } = await supabase
         .from("node_reports")
         .select("*")
@@ -80,7 +91,7 @@ export default function Dashboard() {
       } else {
         console.log("✅ Initial data fetched:", data?.length, "reports");
         setReports(data || []);
-        setConnectionStatus("connected");
+        
         const latestNodes: Record<number, NodeReport> = {};
         data?.forEach((report) => {
           if (!latestNodes[report.node_id]) {
@@ -88,53 +99,63 @@ export default function Dashboard() {
           }
         });
         setNodes(latestNodes);
+        
+        // Fetch initial predictions for these nodes
+        Object.keys(latestNodes).forEach(id => fetchAiPrediction(Number(id)));
       }
       setLoading(false);
-    }
 
-    fetchInitialData();
-
-    const channel = supabase
-      .channel("node_reports_changes")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "node_reports" },
-        (payload) => {
-          console.log("🔥 New report received via Realtime:", payload.new);
-          if (payload.new && "node_id" in payload.new) {
+      // 2. Set up Realtime subscription with improved error handling
+      channel = supabase
+        .channel("node_reports_changes")
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "node_reports" },
+          (payload) => {
+            console.log("🔥 New report received via Realtime:", payload.new);
             const newReport = payload.new as NodeReport;
+            
+            // Batch state updates to prevent flickering
             setReports((prev) => [newReport, ...prev].slice(0, 100));
             setNodes((prev) => ({
               ...prev,
               [newReport.node_id]: newReport
             }));
-            // Trigger AI prediction for the new report
+            
+            // Trigger AI prediction immediately
             fetchAiPrediction(newReport.node_id);
-          } else {
-            console.warn("⚠️ Received incomplete report via Realtime:", payload);
           }
-        }
-      )
-      .subscribe((status) => {
-        console.log("📡 Subscription status:", status);
-        if (status === "CHANNEL_ERROR") {
-          console.error("❌ Failed to connect to Realtime channel. Check if Realtime is enabled for 'node_reports' table.");
-        }
-      });
+        )
+        .subscribe((status, err) => {
+          console.log("📡 Subscription status:", status);
+          if (status === "SUBSCRIBED") {
+            setConnectionStatus("connected");
+          } else if (status === "CLOSED") {
+            setConnectionStatus("reconnecting");
+          } else if (status === "CHANNEL_ERROR") {
+            console.error("❌ Realtime channel error:", err);
+            setConnectionStatus("error");
+          }
+        });
+    }
+
+    initializeDashboard();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
     };
   }, [fetchAiPrediction]);
 
-  // Periodically fetch AI predictions for active nodes
+  // Periodically fetch AI predictions for active nodes as a fallback
   useEffect(() => {
-    if (Object.keys(nodes).length > 0) {
-      const interval = setInterval(() => {
-        Object.keys(nodes).forEach(nodeId => fetchAiPrediction(Number(nodeId)));
-      }, 5000);
-      return () => clearInterval(interval);
-    }
+    const interval = setInterval(() => {
+      const nodeIds = Object.keys(nodes);
+      if (nodeIds.length > 0) {
+        nodeIds.forEach(nodeId => fetchAiPrediction(Number(nodeId)));
+      }
+    }, 10000); // 10s fallback polling (less frequent to avoid freezing)
+    
+    return () => clearInterval(interval);
   }, [nodes, fetchAiPrediction]);
 
   const activeNodes = Object.values(nodes);
@@ -178,9 +199,9 @@ export default function Dashboard() {
           <div className="flex items-center gap-2 rounded-md bg-zinc-900/50 border border-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-400 shadow-subtle">
             <Activity className={cn(
               "h-3.5 w-3.5",
-              connectionStatus === "connected" ? "text-blue-500" : connectionStatus === "error" ? "text-red-500" : "text-zinc-500"
+              connectionStatus === "connected" ? "text-blue-500" : connectionStatus === "error" ? "text-red-500" : "text-zinc-500 animate-pulse"
             )} />
-            {connectionStatus === "connected" ? `${activeNodes.length} NODES ONLINE` : connectionStatus === "error" ? "CONNECTION ERROR" : "CONNECTING..."}
+            {connectionStatus === "connected" ? `${activeNodes.length} NODES ONLINE` : connectionStatus === "error" ? "CONNECTION ERROR" : connectionStatus === "reconnecting" ? "RECONNECTING..." : "CONNECTING..."}
           </div>
         </div>
       </header>
