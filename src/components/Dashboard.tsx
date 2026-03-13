@@ -299,7 +299,7 @@ export default function Dashboard() {
                         "h-full transition-all duration-1000",
                         node.smoke_analog > 2000 ? "bg-red-500" : "bg-blue-500"
                       )}
-                      style={{ width: `${Math.min(100, (node.smoke_analog / 1024) * 100)}%` }}
+                      style={{ width: `${Math.min(100, (node.smoke_analog / 4095) * 100)}%` }}
                     />
                   </div>
                 </div>

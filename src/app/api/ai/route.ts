@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   let confidence = 0.8;
 
   // Rule-based simulation of AI inference
-  if (sensor.smoke_analog > 150 || sensor.smoke_digital) {
+  if (sensor.smoke_analog > 2000 || sensor.smoke_digital) {
     prediction = "SMOKE_ALERT";
     confidence = 0.95;
   }
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Potential FIRE_RISK logic (High temp + Smoke)
-  if (sensor.temp > 45 && sensor.smoke_analog > 100) {
+  if (sensor.temp > 45 && sensor.smoke_analog > 1500) {
     prediction = "FIRE_RISK";
     confidence = 0.98;
   }
