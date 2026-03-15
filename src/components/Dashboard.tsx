@@ -13,7 +13,10 @@ import {
   History,
   LayoutGrid,
   Zap,
-  Brain
+  Brain,
+  Wifi,
+  WifiOff,
+  Clock
 } from "lucide-react";
 import { 
   XAxis, 
@@ -24,7 +27,7 @@ import {
   AreaChart,
   Area
 } from "recharts";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 
 interface NodeReport {
@@ -38,6 +41,7 @@ interface NodeReport {
   smoke_analog: number;
   smoke_digital: boolean;
   danger: boolean;
+  rssi?: number;
   inserted_at: string;
 }
 
@@ -161,6 +165,15 @@ export default function Dashboard() {
   const activeNodes = Object.values(nodes);
   const dangerNodes = activeNodes.filter(n => n.danger);
 
+  // Helper to get RSSI icon and color
+  const getRssiDisplay = (rssi?: number) => {
+    if (rssi === undefined) return { icon: WifiOff, color: "text-zinc-500", label: "N/A" };
+    if (rssi >= -50) return { icon: Wifi, color: "text-emerald-500", label: "Excellent" };
+    if (rssi >= -70) return { icon: Wifi, color: "text-blue-500", label: "Good" };
+    if (rssi >= -85) return { icon: Wifi, color: "text-amber-500", label: "Fair" };
+    return { icon: Wifi, color: "text-red-500", label: "Weak" };
+  };
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#0a0a0a] text-[#f4f4f5]">
@@ -218,6 +231,9 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {activeNodes.map((node) => {
               const ai = aiPredictions[node.node_id];
+              const rssiDisplay = getRssiDisplay(node.rssi);
+              const lastSeen = formatDistanceToNow(new Date(node.inserted_at), { addSuffix: true });
+              
               return (
                 <div 
                   key={node.node_id} 
@@ -229,16 +245,29 @@ export default function Dashboard() {
                   )}
                 >
                   <div className="flex items-start justify-between mb-6">
-                    <div>
-                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Device Unit</span>
-                      <h3 className="text-xl font-bold text-white">Node {String(node.node_id).padStart(2, '0')}</h3>
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "flex items-center justify-center h-10 w-10 rounded-lg bg-zinc-900 border border-zinc-800",
+                        node.danger ? "border-red-500/30" : "border-zinc-800"
+                      )}>
+                        <Activity className={cn("h-5 w-5", node.danger ? "text-red-500" : "text-blue-500")} />
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">Device Unit</span>
+                        <h3 className="text-xl font-bold text-white leading-tight">Node {String(node.node_id).padStart(2, '0')}</h3>
+                      </div>
                     </div>
                     <div className="text-right">
-                      <span className="text-[10px] font-medium text-zinc-500 block mb-1 uppercase">Connectivity</span>
+                      <div className="flex items-center justify-end gap-1.5 mb-1">
+                        <rssiDisplay.icon className={cn("h-3.5 w-3.5", rssiDisplay.color)} />
+                        <span className={cn("text-[10px] font-bold uppercase tracking-wider", rssiDisplay.color)}>
+                          {node.rssi ? `${node.rssi} dBm` : "Offline"}
+                        </span>
+                      </div>
                       <div className="flex items-center justify-end gap-1.5">
-                        <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                        <span className="text-[11px] font-mono text-zinc-400">
-                          {format(new Date(node.inserted_at), "HH:mm:ss")}
+                        <Clock className="h-3 w-3 text-zinc-500" />
+                        <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-tight">
+                          {lastSeen}
                         </span>
                       </div>
                     </div>

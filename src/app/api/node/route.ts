@@ -99,6 +99,7 @@ export async function POST(req: NextRequest) {
     smoke_analog: parsedBody.data.smokeAnalog,
     smoke_digital: parsedBody.data.smokeDigital,
     danger: parsedBody.data.danger,
+    rssi: parsedBody.data.rssi,
   };
 
   try {
