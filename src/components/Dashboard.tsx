@@ -61,7 +61,7 @@ export default function Dashboard() {
 
   // Periodically update the "now" time to keep "Last Seen" and "Online" counts accurate
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 30000); // Update every 30s
+    const timer = setInterval(() => setNow(new Date()), 2000); // Update every 2s for 10s threshold
     return () => clearInterval(timer);
   }, []);
 
@@ -84,8 +84,17 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    setConnectionStatus("connecting");
-    
+    // Firebase handles connection state automatically. We'll listen to the special .info/connected path.
+    const connectedRef = ref(rtdb, ".info/connected");
+    const unsubscribeConn = onValue(connectedRef, (snap) => {
+      if (snap.val() === true) {
+        setConnectionStatus("connected");
+      } else {
+        // Only show reconnecting if we were already loading or connected
+        setConnectionStatus(prev => prev === "connected" ? "reconnecting" : "connecting");
+      }
+    });
+
     // 1. Listen for latest node states
     const nodesRef = ref(rtdb, "nodes");
     const unsubscribeNodes = onValue(nodesRef, (snapshot) => {
@@ -100,7 +109,6 @@ export default function Dashboard() {
         });
         
         setNodes(latestNodes);
-        setConnectionStatus("connected");
         setLoading(false);
         
         // Trigger AI predictions for updated nodes
@@ -127,6 +135,7 @@ export default function Dashboard() {
     });
 
     return () => {
+      unsubscribeConn();
       unsubscribeNodes();
       unsubscribeReports();
     };
@@ -146,8 +155,8 @@ export default function Dashboard() {
 
   const activeNodes = Object.values(nodes).sort((a, b) => a.node_id - b.node_id);
   
-  // A node is considered "online" if it has sent a report in the last 2 minutes
-  const STALE_THRESHOLD = 2 * 60 * 1000; 
+  // A node is considered "online" if it has sent a report in the last 15 seconds (10s delay + 5s buffer)
+  const STALE_THRESHOLD = 15 * 1000; 
   const onlineNodes = activeNodes.filter(n => {
     const lastSeenTime = new Date(n.inserted_at).getTime();
     return (now.getTime() - lastSeenTime) < STALE_THRESHOLD;
