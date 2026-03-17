@@ -290,6 +290,19 @@ export default function Dashboard() {
 
                       <div className="space-y-1">
                         <div className="flex items-center gap-1.5 text-zinc-500">
+                          <Wifi className="h-3 w-3" />
+                          <span className="text-[10px] font-semibold uppercase tracking-wider">Signal Strength</span>
+                        </div>
+                        <p className={cn(
+                          "text-sm font-medium font-mono",
+                          rssiDisplay.color
+                        )}>
+                          {isOnline && node.rssi ? `${node.rssi} dBm` : "---"} <span className="text-[10px] opacity-70 ml-1">({rssiDisplay.label})</span>
+                        </p>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5 text-zinc-500">
                           <Compass className="h-3 w-3" />
                           <span className="text-[10px] font-semibold uppercase tracking-wider">Orientation</span>
                         </div>
