@@ -56,6 +56,13 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "error" | "reconnecting">("connecting");
   const [aiPredictions, setAiPredictions] = useState<Record<number, AIPrediction>>({});
+  const [now, setNow] = useState(new Date());
+
+  // Periodically update the "now" time to keep "Last Seen" and "Online" counts accurate
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30000); // Update every 30s
+    return () => clearInterval(timer);
+  }, []);
 
   // Fetch AI prediction from our new endpoint
   const fetchAiPrediction = useCallback(async (nodeId: number) => {
@@ -77,7 +84,7 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    let channel: any;
+    let channel: ReturnType<typeof supabase.channel> | undefined;
 
     async function initializeDashboard() {
       setConnectionStatus("connecting");
@@ -162,12 +169,20 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [nodes, fetchAiPrediction]);
 
-  const activeNodes = Object.values(nodes);
-  const dangerNodes = activeNodes.filter(n => n.danger);
+  const activeNodes = Object.values(nodes).sort((a, b) => a.node_id - b.node_id);
+  
+  // A node is considered "online" if it has sent a report in the last 2 minutes
+  const STALE_THRESHOLD = 2 * 60 * 1000; 
+  const onlineNodes = activeNodes.filter(n => {
+    const lastSeenTime = new Date(n.inserted_at).getTime();
+    return (now.getTime() - lastSeenTime) < STALE_THRESHOLD;
+  });
+
+  const dangerNodes = onlineNodes.filter(n => n.danger);
 
   // Helper to get RSSI icon and color
-  const getRssiDisplay = (rssi?: number) => {
-    if (rssi === undefined) return { icon: WifiOff, color: "text-zinc-500", label: "N/A" };
+  const getRssiDisplay = (rssi?: number, isOnline?: boolean) => {
+    if (!isOnline || rssi === undefined) return { icon: WifiOff, color: "text-zinc-500", label: "OFFLINE" };
     if (rssi >= -50) return { icon: Wifi, color: "text-emerald-500", label: "Excellent" };
     if (rssi >= -70) return { icon: Wifi, color: "text-blue-500", label: "Good" };
     if (rssi >= -85) return { icon: Wifi, color: "text-amber-500", label: "Fair" };
@@ -214,7 +229,7 @@ export default function Dashboard() {
               "h-3.5 w-3.5",
               connectionStatus === "connected" ? "text-blue-500" : connectionStatus === "error" ? "text-red-500" : "text-zinc-500 animate-pulse"
             )} />
-            {connectionStatus === "connected" ? `${activeNodes.length} NODES ONLINE` : connectionStatus === "error" ? "CONNECTION ERROR" : connectionStatus === "reconnecting" ? "RECONNECTING..." : "CONNECTING..."}
+            {connectionStatus === "connected" ? `${onlineNodes.length} NODES ONLINE` : connectionStatus === "error" ? "CONNECTION ERROR" : connectionStatus === "reconnecting" ? "RECONNECTING..." : "CONNECTING..."}
           </div>
         </div>
       </header>
@@ -231,7 +246,8 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {activeNodes.map((node) => {
               const ai = aiPredictions[node.node_id];
-              const rssiDisplay = getRssiDisplay(node.rssi);
+              const isOnline = (now.getTime() - new Date(node.inserted_at).getTime()) < STALE_THRESHOLD;
+              const rssiDisplay = getRssiDisplay(node.rssi, isOnline);
               const lastSeen = formatDistanceToNow(new Date(node.inserted_at), { addSuffix: true });
               
               return (
@@ -241,16 +257,18 @@ export default function Dashboard() {
                     "group relative rounded-lg border p-5 transition-all duration-300 shadow-subtle hover:translate-y-[-2px]",
                     node.danger 
                       ? "border-red-500/50 bg-red-500/5 hover:bg-red-500/10" 
-                      : "border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900/60 hover:border-zinc-700"
+                      : !isOnline 
+                        ? "border-zinc-900 bg-zinc-900/10 opacity-60 grayscale-[0.5]"
+                        : "border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900/60 hover:border-zinc-700"
                   )}
                 >
                   <div className="flex items-start justify-between mb-6">
                     <div className="flex items-center gap-3">
                       <div className={cn(
                         "flex items-center justify-center h-10 w-10 rounded-lg bg-zinc-900 border border-zinc-800",
-                        node.danger ? "border-red-500/30" : "border-zinc-800"
+                        node.danger ? "border-red-500/30" : !isOnline ? "border-zinc-900" : "border-zinc-800"
                       )}>
-                        <Activity className={cn("h-5 w-5", node.danger ? "text-red-500" : "text-blue-500")} />
+                        <Activity className={cn("h-5 w-5", node.danger ? "text-red-500" : isOnline ? "text-blue-500" : "text-zinc-600")} />
                       </div>
                       <div>
                         <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">Device Unit</span>
@@ -261,7 +279,7 @@ export default function Dashboard() {
                       <div className="flex items-center justify-end gap-1.5 mb-1">
                         <rssiDisplay.icon className={cn("h-3.5 w-3.5", rssiDisplay.color)} />
                         <span className={cn("text-[10px] font-bold uppercase tracking-wider", rssiDisplay.color)}>
-                          {node.rssi ? `${node.rssi} dBm` : "Offline"}
+                          {isOnline && node.rssi ? `${node.rssi} dBm` : rssiDisplay.label}
                         </span>
                       </div>
                       <div className="flex items-center justify-end gap-1.5">
