@@ -1,20 +1,25 @@
 import { NextResponse } from "next/server";
-import supabase from "@/lib/supabaseAdmin";
+import { db } from "@/lib/firebaseAdmin";
 
 export async function GET() {
   try {
-    const { data, error } = await supabase
-      .from("node_reports")
-      .select("temp,hum,pitch,roll,smoke_analog,smoke_digital,danger,node_id,timestamp")
-      .order("inserted_at", { ascending: false })
-      .limit(1000);
+    const reportsRef = db.ref("node_reports");
+    // Firebase RTDB limitToLast is the closest to SQL's limit
+    const snapshot = await reportsRef.limitToLast(1000).get();
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!snapshot.exists()) {
+      return NextResponse.json([]);
     }
 
-    // Format for easier export to CSV or Edge Impulse
-    return NextResponse.json(data);
+    const data = snapshot.val();
+    const reportsList = Object.keys(data)
+      .map(key => ({
+        ...data[key],
+        id: key
+      }))
+      .reverse(); // Newest first
+
+    return NextResponse.json(reportsList);
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: errorMessage }, { status: 500 });

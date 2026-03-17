@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { rtdb } from "@/lib/firebaseClient";
+import { ref, onValue, query, limitToLast, orderByKey } from "firebase/database";
 import { 
   Activity, 
   AlertTriangle, 
@@ -31,7 +32,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 
 interface NodeReport {
-  id: number;
+  id: string;
   timestamp: number;
   node_id: number;
   temp: number;
@@ -64,14 +65,13 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch AI prediction from our new endpoint
+  // Fetch AI prediction from our endpoint
   const fetchAiPrediction = useCallback(async (nodeId: number) => {
     try {
       const res = await fetch(`/api/ai?nodeId=${nodeId}`);
       if (res.ok) {
         const data = await res.json();
         setAiPredictions(prev => {
-          // Only update if the prediction has changed or is newer
           if (prev[nodeId]?.prediction === data.prediction && prev[nodeId]?.confidence === data.confidence) {
             return prev;
           }
@@ -84,80 +84,51 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    let channel: ReturnType<typeof supabase.channel> | undefined;
-
-    async function initializeDashboard() {
-      setConnectionStatus("connecting");
-      
-      // 1. Fetch initial data
-      console.log("🛠️ Starting initial data fetch...");
-      const { data, error } = await supabase
-        .from("node_reports")
-        .select("*")
-        .order("inserted_at", { ascending: false })
-        .limit(100);
-
-      if (error) {
-        console.error("❌ Supabase fetch error:", error.message, error.details, error.hint);
-        setConnectionStatus("error");
-      } else {
-        console.log("✅ Initial data fetched:", data?.length, "reports");
-        if (data?.length === 0) {
-          console.warn("⚠️ No data found in node_reports table. Check if RLS is enabled or if data is being inserted.");
-        }
-        setReports(data || []);
-        
+    setConnectionStatus("connecting");
+    
+    // 1. Listen for latest node states
+    const nodesRef = ref(rtdb, "nodes");
+    const unsubscribeNodes = onValue(nodesRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
         const latestNodes: Record<number, NodeReport> = {};
-        data?.forEach((report) => {
-          if (!latestNodes[report.node_id]) {
-            latestNodes[report.node_id] = report;
-          }
-        });
-        setNodes(latestNodes);
         
-        // Fetch initial predictions for these nodes
-        Object.keys(latestNodes).forEach(id => fetchAiPrediction(Number(id)));
-      }
-      setLoading(false);
-
-      // 2. Set up Realtime subscription with improved error handling
-      channel = supabase
-        .channel("node_reports_changes")
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "node_reports" },
-          (payload) => {
-            console.log("🔥 New report received via Realtime:", payload.new);
-            const newReport = payload.new as NodeReport;
-            
-            // Batch state updates to prevent flickering
-            setReports((prev) => [newReport, ...prev].slice(0, 100));
-            setNodes((prev) => ({
-              ...prev,
-              [newReport.node_id]: newReport
-            }));
-            
-            // Trigger AI prediction immediately
-            fetchAiPrediction(newReport.node_id);
-          }
-        )
-        .subscribe((status, err) => {
-          console.log("📡 Subscription status:", status);
-          if (status === "SUBSCRIBED") {
-            setConnectionStatus("connected");
-          } else if (status === "CLOSED") {
-            setConnectionStatus("reconnecting");
-          } else if (status === "CHANNEL_ERROR") {
-            console.error("❌ Realtime channel error:", err);
-            setConnectionStatus("error");
+        Object.keys(data).forEach(id => {
+          if (data[id].latest) {
+            latestNodes[Number(id)] = { ...data[id].latest, id };
           }
         });
-    }
+        
+        setNodes(latestNodes);
+        setConnectionStatus("connected");
+        setLoading(false);
+        
+        // Trigger AI predictions for updated nodes
+        Object.keys(latestNodes).forEach(id => fetchAiPrediction(Number(id)));
+      } else {
+        setLoading(false);
+      }
+    }, (error) => {
+      console.error("Firebase nodes subscription error:", error);
+      setConnectionStatus("error");
+    });
 
-    initializeDashboard();
+    // 2. Listen for historical reports (last 100)
+    const reportsRef = query(ref(rtdb, "node_reports"), orderByKey(), limitToLast(100));
+    const unsubscribeReports = onValue(reportsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const reportsList = Object.keys(data)
+          .map(key => ({ ...data[key], id: key }))
+          .reverse(); // Newest first
+        
+        setReports(reportsList);
+      }
+    });
 
     return () => {
-      if (channel) supabase.removeChannel(channel);
+      unsubscribeNodes();
+      unsubscribeReports();
     };
   }, [fetchAiPrediction]);
 
@@ -168,7 +139,7 @@ export default function Dashboard() {
       if (nodeIds.length > 0) {
         nodeIds.forEach(nodeId => fetchAiPrediction(Number(nodeId)));
       }
-    }, 10000); // 10s fallback polling (less frequent to avoid freezing)
+    }, 15000); 
     
     return () => clearInterval(interval);
   }, [nodes, fetchAiPrediction]);
@@ -184,7 +155,6 @@ export default function Dashboard() {
 
   const dangerNodes = onlineNodes.filter(n => n.danger);
 
-  // Helper to get RSSI icon and color
   const getRssiDisplay = (rssi?: number, isOnline?: boolean) => {
     if (!isOnline || rssi === undefined) return { icon: WifiOff, color: "text-zinc-500", label: "OFFLINE" };
     if (rssi >= -50) return { icon: Wifi, color: "text-emerald-500", label: "Excellent" };
@@ -198,7 +168,7 @@ export default function Dashboard() {
       <div className="flex h-screen items-center justify-center bg-[#0a0a0a] text-[#f4f4f5]">
         <div className="flex flex-col items-center gap-4">
           <Zap className="h-8 w-8 animate-pulse text-blue-500" />
-          <p className="text-sm font-medium tracking-tight">Initializing HazardNode Systems...</p>
+          <p className="text-sm font-medium tracking-tight">Initializing HazardNode Systems (Firebase)...</p>
         </div>
       </div>
     );
@@ -206,7 +176,6 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] p-6 text-[#f4f4f5] md:p-10">
-      {/* Header Section */}
       <header className="mb-10 flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -233,15 +202,12 @@ export default function Dashboard() {
               "h-3.5 w-3.5",
               connectionStatus === "connected" ? "text-blue-500" : connectionStatus === "error" ? "text-red-500" : "text-zinc-500 animate-pulse"
             )} />
-            {connectionStatus === "connected" ? `${onlineNodes.length} NODES ONLINE` : connectionStatus === "error" ? "CONNECTION ERROR" : connectionStatus === "reconnecting" ? "RECONNECTING..." : "CONNECTING..."}
+            {connectionStatus === "connected" ? `${onlineNodes.length} NODES ONLINE` : connectionStatus === "error" ? "CONNECTION ERROR" : "CONNECTING..."}
           </div>
         </div>
       </header>
 
-      {/* Main Grid */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-        
-        {/* Node Grid - Left Side */}
         <div className="lg:col-span-8 space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Active Sensor Nodes</h2>
@@ -337,7 +303,6 @@ export default function Dashboard() {
                       </div>
                     </div>
 
-                    {/* AI Prediction Section */}
                     {ai && (
                       <div className="mt-6 pt-4 border-t border-zinc-800/50">
                         <div className="flex items-center gap-2 mb-3">
@@ -365,7 +330,6 @@ export default function Dashboard() {
                       </div>
                     )}
                     
-                    {/* Subtle progress indicator for smoke analog level */}
                     <div className="mt-6 h-1 w-full bg-zinc-800 rounded-full overflow-hidden">
                       <div 
                         className={cn(
@@ -388,7 +352,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Analytics - Right Side */}
         <div className="lg:col-span-4 space-y-8">
           <div className="rounded-lg border border-zinc-800 bg-zinc-900/20 p-6 shadow-subtle">
             <h2 className="mb-6 text-sm font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
@@ -406,7 +369,9 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#18181b" vertical={false} />
                   <XAxis 
                     dataKey="inserted_at" 
-                    tickFormatter={(time) => format(new Date(time), "HH:mm")}
+                    tickFormatter={(time) => {
+                      try { return format(new Date(time), "HH:mm"); } catch { return ""; }
+                    }}
                     stroke="#3f3f46"
                     fontSize={10}
                     tickLine={false}
@@ -421,7 +386,9 @@ export default function Dashboard() {
                   />
                   <Tooltip 
                     contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", color: "#f4f4f5", borderRadius: "6px", fontSize: "11px", boxShadow: "0 10px 15px -3px rgba(0,0,0,0.5)" }}
-                    labelFormatter={(label) => format(new Date(label), "HH:mm:ss")}
+                    labelFormatter={(label) => {
+                      try { return format(new Date(label), "HH:mm:ss"); } catch { return ""; }
+                    }}
                   />
                   <Area 
                     type="monotone" 
@@ -446,7 +413,7 @@ export default function Dashboard() {
                 <div key={report.id} className="group flex flex-col gap-1.5 border-l-2 border-zinc-800 pl-4 py-1 transition-colors hover:border-blue-500/50">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-mono text-zinc-500">
-                      {format(new Date(report.inserted_at), "HH:mm:ss.SS")}
+                      {tryFormat(report.inserted_at)}
                     </span>
                     <span className={cn(
                       "text-[9px] font-bold px-1.5 py-0.5 rounded",
@@ -468,7 +435,6 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-
       </div>
 
       <style jsx global>{`
@@ -485,15 +451,15 @@ export default function Dashboard() {
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
           background: #3f3f46;
         }
-        
-        @keyframes subtle-pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.8; }
-        }
-        .animate-subtle-pulse {
-          animation: subtle-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        }
       `}</style>
     </div>
   );
+}
+
+function tryFormat(dateStr: string) {
+  try {
+    return format(new Date(dateStr), "HH:mm:ss.SS");
+  } catch {
+    return "00:00:00";
+  }
 }

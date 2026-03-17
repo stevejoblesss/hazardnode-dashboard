@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { NodeRequestBody } from "@/schemas/node.schema";
 import * as z from "zod";
-import supabase from "@/lib/supabaseAdmin";
+import { db } from "@/lib/firebaseAdmin";
 
 // Edge Impulse Automatic Ingestion (Throttled to 1 sample per minute)
-async function forwardToEdgeImpulse(payload: Record<string, unknown>) {
+async function forwardToEdgeImpulse(payload: Record<string, any>) {
   const apiKey = process.env.EDGE_IMPULSE_API_KEY;
   if (!apiKey) {
     console.warn("⚠️ EDGE_IMPULSE_API_KEY is missing in environment variables. Data push skipped.");
@@ -12,23 +12,14 @@ async function forwardToEdgeImpulse(payload: Record<string, unknown>) {
   }
 
   try {
-    // 1. Check if we've sent data for this node in the last 60 seconds
-    const oneMinuteAgo = new Date(Date.now() - 60000).toISOString();
+    // 1. Check throttling in Firebase
+    const nodeRef = db.ref(`nodes/${payload.node_id}`);
+    const snapshot = await nodeRef.child("last_ei_push").get();
+    const lastPush = snapshot.val();
     
-    const { data: recentReports, error: dbError } = await supabase
-      .from("node_reports")
-      .select("inserted_at")
-      .eq("node_id", payload.node_id)
-      .gt("inserted_at", oneMinuteAgo)
-      .order("inserted_at", { ascending: false })
-      .limit(2);
+    const oneMinuteAgo = Date.now() - 60000;
 
-    if (dbError) {
-      console.error("❌ Error checking recent reports for throttling:", dbError);
-      return;
-    }
-
-    if (recentReports && recentReports.length > 1) {
+    if (lastPush && lastPush > oneMinuteAgo) {
       console.log(`⏳ Throttling Edge Impulse push for Node ${payload.node_id} (Last push < 1m ago)`);
       return;
     }
@@ -66,6 +57,8 @@ async function forwardToEdgeImpulse(payload: Record<string, unknown>) {
       console.error(`❌ Edge Impulse ingestion failed (Status: ${response.status}):`, errorText);
     } else {
       console.log(`✅ Successfully forwarded Node ${payload.node_id} data to Edge Impulse.`);
+      // Update last push time
+      await nodeRef.update({ last_ei_push: Date.now() });
     }
   } catch (err) {
     console.error("❌ Critical Edge Impulse Ingestion Error:", err);
@@ -99,26 +92,31 @@ export async function POST(req: NextRequest) {
     smoke_analog: parsedBody.data.smokeAnalog,
     smoke_digital: parsedBody.data.smokeDigital,
     danger: parsedBody.data.danger,
-    rssi: parsedBody.data.rssi,
+    rssi: parsedBody.data.rssi || null,
+    inserted_at: new Date().toISOString()
   };
 
   try {
-    const { data, error } = await supabase.from("node_reports").insert([payload]);
-    if (error) {
-      console.error("Error inserting into node_reports table:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    // 1. Save to historical reports list
+    const reportsRef = db.ref("node_reports");
+    const newReportRef = reportsRef.push();
+    await newReportRef.set(payload);
+
+    // 2. Update latest node state for quick dashboard access
+    const nodeStateRef = db.ref(`nodes/${payload.node_id}/latest`);
+    await nodeStateRef.set(payload);
 
     // Automatically push to Edge Impulse if configured
     try {
       await forwardToEdgeImpulse(payload);
     } catch (err) {
-      console.error("Error forwarding to Edge Impulse:", err);
-   }
+      console.error("⚠️ Edge Impulse background task error (non-critical):", err);
+    }
 
-    return NextResponse.json({ success: true, data }, { status: 200 });
+    return NextResponse.json({ success: true, id: newReportRef.key }, { status: 200 });
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    console.error("❌ Unexpected server error in /api/node:", errorMessage);
+    return NextResponse.json({ error: "Internal server error", message: errorMessage }, { status: 500 });
   }
 }
