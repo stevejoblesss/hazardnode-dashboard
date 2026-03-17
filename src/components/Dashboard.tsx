@@ -90,6 +90,7 @@ export default function Dashboard() {
       setConnectionStatus("connecting");
       
       // 1. Fetch initial data
+      console.log("🛠️ Starting initial data fetch...");
       const { data, error } = await supabase
         .from("node_reports")
         .select("*")
@@ -97,10 +98,13 @@ export default function Dashboard() {
         .limit(100);
 
       if (error) {
-        console.error("Error fetching reports:", error);
+        console.error("❌ Supabase fetch error:", error.message, error.details, error.hint);
         setConnectionStatus("error");
       } else {
         console.log("✅ Initial data fetched:", data?.length, "reports");
+        if (data?.length === 0) {
+          console.warn("⚠️ No data found in node_reports table. Check if RLS is enabled or if data is being inserted.");
+        }
         setReports(data || []);
         
         const latestNodes: Record<number, NodeReport> = {};
@@ -244,135 +248,143 @@ export default function Dashboard() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {activeNodes.map((node) => {
-              const ai = aiPredictions[node.node_id];
-              const isOnline = (now.getTime() - new Date(node.inserted_at).getTime()) < STALE_THRESHOLD;
-              const rssiDisplay = getRssiDisplay(node.rssi, isOnline);
-              const lastSeen = formatDistanceToNow(new Date(node.inserted_at), { addSuffix: true });
-              
-              return (
-                <div 
-                  key={node.node_id} 
-                  className={cn(
-                    "group relative rounded-lg border p-5 transition-all duration-300 shadow-subtle hover:translate-y-[-2px]",
-                    node.danger 
-                      ? "border-red-500/50 bg-red-500/5 hover:bg-red-500/10" 
-                      : !isOnline 
-                        ? "border-zinc-900 bg-zinc-900/10 opacity-60 grayscale-[0.5]"
-                        : "border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900/60 hover:border-zinc-700"
-                  )}
-                >
-                  <div className="flex items-start justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className={cn(
-                        "flex items-center justify-center h-10 w-10 rounded-lg bg-zinc-900 border border-zinc-800",
-                        node.danger ? "border-red-500/30" : !isOnline ? "border-zinc-900" : "border-zinc-800"
-                      )}>
-                        <Activity className={cn("h-5 w-5", node.danger ? "text-red-500" : isOnline ? "text-blue-500" : "text-zinc-600")} />
+            {activeNodes.length > 0 ? (
+              activeNodes.map((node) => {
+                const ai = aiPredictions[node.node_id];
+                const isOnline = (now.getTime() - new Date(node.inserted_at).getTime()) < STALE_THRESHOLD;
+                const rssiDisplay = getRssiDisplay(node.rssi, isOnline);
+                const lastSeen = formatDistanceToNow(new Date(node.inserted_at), { addSuffix: true });
+                
+                return (
+                  <div 
+                    key={node.node_id} 
+                    className={cn(
+                      "group relative rounded-lg border p-5 transition-all duration-300 shadow-subtle hover:translate-y-[-2px]",
+                      node.danger 
+                        ? "border-red-500/50 bg-red-500/5 hover:bg-red-500/10" 
+                        : !isOnline 
+                          ? "border-zinc-900 bg-zinc-900/10 opacity-60 grayscale-[0.5]"
+                          : "border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900/60 hover:border-zinc-700"
+                    )}
+                  >
+                    <div className="flex items-start justify-between mb-6">
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "flex items-center justify-center h-10 w-10 rounded-lg bg-zinc-900 border border-zinc-800",
+                          node.danger ? "border-red-500/30" : !isOnline ? "border-zinc-900" : "border-zinc-800"
+                        )}>
+                          <Activity className={cn("h-5 w-5", node.danger ? "text-red-500" : isOnline ? "text-blue-500" : "text-zinc-600")} />
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">Device Unit</span>
+                          <h3 className="text-xl font-bold text-white leading-tight">Node {String(node.node_id).padStart(2, '0')}</h3>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">Device Unit</span>
-                        <h3 className="text-xl font-bold text-white leading-tight">Node {String(node.node_id).padStart(2, '0')}</h3>
+                      <div className="text-right">
+                        <div className="flex items-center justify-end gap-1.5 mb-1">
+                          <rssiDisplay.icon className={cn("h-3.5 w-3.5", rssiDisplay.color)} />
+                          <span className={cn("text-[10px] font-bold uppercase tracking-wider", rssiDisplay.color)}>
+                            {isOnline && node.rssi ? `${node.rssi} dBm` : rssiDisplay.label}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Clock className="h-3 w-3 text-zinc-500" />
+                          <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-tight">
+                            {lastSeen}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="flex items-center justify-end gap-1.5 mb-1">
-                        <rssiDisplay.icon className={cn("h-3.5 w-3.5", rssiDisplay.color)} />
-                        <span className={cn("text-[10px] font-bold uppercase tracking-wider", rssiDisplay.color)}>
-                          {isOnline && node.rssi ? `${node.rssi} dBm` : rssiDisplay.label}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-end gap-1.5">
-                        <Clock className="h-3 w-3 text-zinc-500" />
-                        <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-tight">
-                          {lastSeen}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-y-6 gap-x-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5 text-zinc-500">
-                        <Thermometer className="h-3 w-3" />
-                        <span className="text-[10px] font-semibold uppercase tracking-wider">Temperature</span>
-                      </div>
-                      <p className="text-2xl font-semibold tracking-tight text-white">{node.temp}<span className="text-sm text-zinc-500 ml-0.5">°C</span></p>
-                    </div>
-                    
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5 text-zinc-500">
-                        <Droplets className="h-3 w-3" />
-                        <span className="text-[10px] font-semibold uppercase tracking-wider">Humidity</span>
-                      </div>
-                      <p className="text-2xl font-semibold tracking-tight text-white">{node.hum}<span className="text-sm text-zinc-500 ml-0.5">%</span></p>
                     </div>
 
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5 text-zinc-500">
-                        <Compass className="h-3 w-3" />
-                        <span className="text-[10px] font-semibold uppercase tracking-wider">Orientation</span>
-                      </div>
-                      <p className="text-sm font-medium text-white font-mono">
-                        P: {node.pitch.toFixed(1)}° <span className="text-zinc-600 mx-1">/</span> R: {node.roll.toFixed(1)}°
-                      </p>
-                    </div>
-
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5 text-zinc-500">
-                        <Wind className="h-3 w-3" />
-                        <span className="text-[10px] font-semibold uppercase tracking-wider">Smoke Analysis</span>
-                      </div>
-                      <p className={cn(
-                        "text-xs font-bold uppercase tracking-widest",
-                        node.smoke_digital ? "text-red-400" : "text-emerald-400"
-                      )}>
-                        {node.smoke_digital ? "CRITICAL ALERT" : "ATMOSPHERE CLEAR"}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* AI Prediction Section */}
-                  {ai && (
-                    <div className="mt-6 pt-4 border-t border-zinc-800/50">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Brain className="h-3.5 w-3.5 text-blue-400" />
-                        <span className="text-[10px] font-bold text-blue-400/80 uppercase tracking-[0.2em]">Live AI Prediction</span>
+                    <div className="grid grid-cols-2 gap-y-6 gap-x-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5 text-zinc-500">
+                          <Thermometer className="h-3 w-3" />
+                          <span className="text-[10px] font-semibold uppercase tracking-wider">Temperature</span>
+                        </div>
+                        <p className="text-2xl font-semibold tracking-tight text-white">{node.temp}<span className="text-sm text-zinc-500 ml-0.5">°C</span></p>
                       </div>
                       
-                      <div className="flex items-center justify-between bg-blue-500/5 border border-blue-500/10 rounded-md p-2">
-                        <div>
-                          <span className="text-[9px] font-medium text-zinc-500 uppercase tracking-wider block mb-0.5">Classification</span>
-                          <span className={cn(
-                            "text-xs font-bold uppercase tracking-wider",
-                            ai.prediction === "NORMAL" ? "text-emerald-400" : "text-amber-400"
-                          )}>
-                            {ai.prediction.replace('_', ' ')}
-                          </span>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5 text-zinc-500">
+                          <Droplets className="h-3 w-3" />
+                          <span className="text-[10px] font-semibold uppercase tracking-wider">Humidity</span>
                         </div>
-                        <div className="text-right">
-                          <span className="text-[9px] font-medium text-zinc-500 uppercase tracking-wider block mb-0.5">Confidence</span>
-                          <span className="text-[10px] font-mono font-bold text-blue-400">
-                            {Math.round(ai.confidence * 100)}%
-                          </span>
+                        <p className="text-2xl font-semibold tracking-tight text-white">{node.hum}<span className="text-sm text-zinc-500 ml-0.5">%</span></p>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5 text-zinc-500">
+                          <Compass className="h-3 w-3" />
+                          <span className="text-[10px] font-semibold uppercase tracking-wider">Orientation</span>
                         </div>
+                        <p className="text-sm font-medium text-white font-mono">
+                          P: {node.pitch.toFixed(1)}° <span className="text-zinc-600 mx-1">/</span> R: {node.roll.toFixed(1)}°
+                        </p>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5 text-zinc-500">
+                          <Wind className="h-3 w-3" />
+                          <span className="text-[10px] font-semibold uppercase tracking-wider">Smoke Analysis</span>
+                        </div>
+                        <p className={cn(
+                          "text-xs font-bold uppercase tracking-widest",
+                          node.smoke_digital ? "text-red-400" : "text-emerald-400"
+                        )}>
+                          {node.smoke_digital ? "CRITICAL ALERT" : "ATMOSPHERE CLEAR"}
+                        </p>
                       </div>
                     </div>
-                  )}
-                  
-                  {/* Subtle progress indicator for smoke analog level */}
-                  <div className="mt-6 h-1 w-full bg-zinc-800 rounded-full overflow-hidden">
-                    <div 
-                      className={cn(
-                        "h-full transition-all duration-1000",
-                        node.smoke_analog > 2000 ? "bg-red-500" : "bg-blue-500"
-                      )}
-                      style={{ width: `${Math.min(100, (node.smoke_analog / 4095) * 100)}%` }}
-                    />
+
+                    {/* AI Prediction Section */}
+                    {ai && (
+                      <div className="mt-6 pt-4 border-t border-zinc-800/50">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Brain className="h-3.5 w-3.5 text-blue-400" />
+                          <span className="text-[10px] font-bold text-blue-400/80 uppercase tracking-[0.2em]">Live AI Prediction</span>
+                        </div>
+                        
+                        <div className="flex items-center justify-between bg-blue-500/5 border border-blue-500/10 rounded-md p-2">
+                          <div>
+                            <span className="text-[9px] font-medium text-zinc-500 uppercase tracking-wider block mb-0.5">Classification</span>
+                            <span className={cn(
+                              "text-xs font-bold uppercase tracking-wider",
+                              ai.prediction === "NORMAL" ? "text-emerald-400" : "text-amber-400"
+                            )}>
+                              {ai.prediction.replace('_', ' ')}
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[9px] font-medium text-zinc-500 uppercase tracking-wider block mb-0.5">Confidence</span>
+                            <span className="text-[10px] font-mono font-bold text-blue-400">
+                              {Math.round(ai.confidence * 100)}%
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Subtle progress indicator for smoke analog level */}
+                    <div className="mt-6 h-1 w-full bg-zinc-800 rounded-full overflow-hidden">
+                      <div 
+                        className={cn(
+                          "h-full transition-all duration-1000",
+                          node.smoke_analog > 2000 ? "bg-red-500" : "bg-blue-500"
+                        )}
+                        style={{ width: `${Math.min(100, (node.smoke_analog / 4095) * 100)}%` }}
+                      />
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            ) : (
+              <div className="col-span-full py-20 flex flex-col items-center justify-center rounded-lg border border-dashed border-zinc-800 bg-zinc-900/10">
+                <Activity className="h-8 w-8 text-zinc-700 mb-4 animate-pulse" />
+                <p className="text-zinc-500 font-medium">No node telemetry detected.</p>
+                <p className="text-[10px] text-zinc-600 uppercase tracking-widest mt-2 font-bold">Waiting for stream...</p>
+              </div>
+            )}
           </div>
         </div>
 
