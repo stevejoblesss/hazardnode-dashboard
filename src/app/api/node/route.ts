@@ -3,6 +3,48 @@ import { NodeRequestBody } from "@/schemas/node.schema";
 import * as z from "zod";
 import { db } from "@/lib/firebaseAdmin";
 
+// Telegram Alert Function
+async function sendTelegramAlert(payload: any) {
+  const botToken = 8648106308:AAF3iDhuALtQgfbvS2piU6e8rkZxdrGhfcw;
+  const chatId = 6907050517;
+
+  if (!botToken || !chatId) {
+    console.warn("⚠️ Telegram credentials missing. Skipping alert.");
+    return;
+  }
+
+  const isTilt = Math.abs(payload.pitch) > 30 || Math.abs(payload.roll) > 30;
+  const isSmoke = payload.smoke_analog > 2000 || payload.smoke_digital;
+  const isDanger = payload.danger;
+
+  if (!isTilt && !isSmoke && !isDanger) return;
+
+  let message = `🚨 *HAZARD ALERT: Node ${payload.node_id}* 🚨\n\n`;
+  
+  if (isDanger) message += `🔴 *CRITICAL DANGER DETECTED!*\n`;
+  if (isSmoke) message += `💨 *SMOKE/GAS DETECTED:* ${payload.smoke_analog}\n`;
+  if (isTilt) message += `📐 *TILT DETECTED:* P:${payload.pitch.toFixed(1)}° R:${payload.roll.toFixed(1)}°\n`;
+  
+  message += `\n🌡 Temp: ${payload.temp}°C | 💧 Hum: ${payload.hum}%\n`;
+  message += `📡 Signal: ${payload.rssi || 'N/A'} dBm\n`;
+  message += `\n🔗 [Open Dashboard](https://hazardnode-dashboard.vercel.app)`;
+
+  try {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: "Markdown",
+      }),
+    });
+    console.log(`✅ Telegram alert sent for Node ${payload.node_id}`);
+  } catch (err) {
+    console.error("❌ Failed to send Telegram alert:", err);
+  }
+}
+
 // Edge Impulse Automatic Ingestion (Throttled to 1 sample per minute)
 async function forwardToEdgeImpulse(payload: Record<string, any>) {
   const apiKey = process.env.EDGE_IMPULSE_API_KEY;
@@ -105,6 +147,13 @@ export async function POST(req: NextRequest) {
     // 2. Update latest node state for quick dashboard access
     const nodeStateRef = db.ref(`nodes/${payload.node_id}/latest`);
     await nodeStateRef.set(payload);
+
+    // 3. Send Telegram alert if necessary
+    try {
+      await sendTelegramAlert(payload);
+    } catch (err) {
+      console.error("⚠️ Telegram background task error:", err);
+    }
 
     // Automatically push to Edge Impulse if configured
     try {
