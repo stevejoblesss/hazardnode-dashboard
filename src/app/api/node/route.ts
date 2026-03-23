@@ -5,8 +5,8 @@ import { db } from "@/lib/firebaseAdmin";
 
 // Telegram Alert Function
 async function sendTelegramAlert(payload: any) {
-  const botToken = 8648106308:AAF3iDhuALtQgfbvS2piU6e8rkZxdrGhfcw;
-  const chatId = 6907050517;
+  const botToken = "8648106308:AAF3iDhuALtQgfbvS2piU6e8rkZxdrGhfcw";
+  const chatId = "6907050517";
 
   if (!botToken || !chatId) {
     console.warn("⚠️ Telegram credentials missing. Skipping alert.");
