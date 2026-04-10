@@ -127,6 +127,7 @@ export async function POST(req: NextRequest) {
   const payload = {
     timestamp: parsedBody.data.timestamp ?? now,
     node_id: parsedBody.data.nodeID,
+    type: parsedBody.data.type || "sensor",
     temp: parsedBody.data.temp,
     hum: parsedBody.data.hum,
     pitch: parsedBody.data.pitch,

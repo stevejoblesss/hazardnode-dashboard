@@ -2,7 +2,8 @@ import * as z from "zod";
 
 export const NodeRequestBody = z.object({
   timestamp: z.number().optional(),
-  nodeID: z.number(),
+  nodeID: z.union([z.number(), z.string()]),
+  type: z.enum(["sensor", "receiver"]).optional().default("sensor"),
   temp: z.number(),
   hum: z.number(),
   pitch: z.number(),
