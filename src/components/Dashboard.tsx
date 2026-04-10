@@ -63,6 +63,251 @@ interface WiFiConfig {
   archived_at?: string;
 }
 
+const getRssiDisplay = (rssi?: number, isOnline?: boolean) => {
+  if (!isOnline || rssi === undefined) return { icon: WifiOff, color: "text-zinc-500", label: "OFFLINE" };
+  if (rssi >= -50) return { icon: Wifi, color: "text-emerald-500", label: "Excellent" };
+  if (rssi >= -70) return { icon: Wifi, color: "text-blue-500", label: "Good" };
+  if (rssi >= -85) return { icon: Wifi, color: "text-amber-500", label: "Fair" };
+  return { icon: Wifi, color: "text-red-500", label: "Weak" };
+};
+
+interface NodeCardProps {
+  node: NodeReport;
+  ai?: AIPrediction;
+  isOnline: boolean;
+  config?: { current: WiFiConfig; prev?: WiFiConfig };
+  editingWifi: string | null;
+  setEditingWifi: (id: string | null) => void;
+  wifiInput: { ssid: string; password: string };
+  setWifiInput: (input: { ssid: string; password: string }) => void;
+  handleUpdateWifi: (nodeId: string | number, ssid?: string, password?: string) => void;
+  isUpdatingWifi: boolean;
+}
+
+const NodeCard = ({ 
+  node, 
+  ai, 
+  isOnline, 
+  config, 
+  editingWifi, 
+  setEditingWifi, 
+  wifiInput, 
+  setWifiInput, 
+  handleUpdateWifi, 
+  isUpdatingWifi 
+}: NodeCardProps) => {
+  const rssiDisplay = getRssiDisplay(node.rssi, isOnline);
+  const lastSeen = formatDistanceToNow(new Date(node.inserted_at), { addSuffix: true });
+  const isEditing = editingWifi === String(node.node_id);
+
+  return (
+    <div 
+      className={cn(
+        "group relative rounded-lg border p-5 transition-all duration-300 shadow-subtle hover:translate-y-[-2px]",
+        node.danger 
+          ? "border-red-500/50 bg-red-500/5 hover:bg-red-500/10" 
+          : !isOnline 
+            ? "border-zinc-900 bg-zinc-900/10 opacity-60 grayscale-[0.5]"
+            : "border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900/60 hover:border-zinc-700"
+      )}
+    >
+      <div className="flex items-start justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className={cn(
+            "flex items-center justify-center h-10 w-10 rounded-lg bg-zinc-900 border border-zinc-800",
+            node.danger ? "border-red-500/30" : !isOnline ? "border-zinc-900" : "border-zinc-800"
+          )}>
+            {node.type === "receiver" ? (
+              <Server className={cn("h-5 w-5", isOnline ? "text-amber-500" : "text-zinc-600")} />
+            ) : (
+              <Activity className={cn("h-5 w-5", node.danger ? "text-red-500" : isOnline ? "text-blue-500" : "text-zinc-600")} />
+            )}
+          </div>
+          <div>
+            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">
+              {node.type === "receiver" ? "System Hub" : "Device Unit"}
+            </span>
+            <h3 className="text-xl font-bold text-white leading-tight">
+              {typeof node.node_id === 'number' ? `Node ${String(node.node_id).padStart(2, '0')}` : node.node_id}
+            </h3>
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-2">
+          <div className="text-right">
+            <div className="flex items-center justify-end gap-1.5 mb-1">
+              <rssiDisplay.icon className={cn("h-3.5 w-3.5", rssiDisplay.color)} />
+              <span className={cn("text-[10px] font-bold uppercase tracking-wider", rssiDisplay.color)}>
+                {isOnline && node.rssi ? `${node.rssi} dBm` : rssiDisplay.label}
+              </span>
+            </div>
+            <div className="flex items-center justify-end gap-1.5">
+              <Clock className="h-3 w-3 text-zinc-500" />
+              <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-tight">
+                {lastSeen}
+              </span>
+            </div>
+          </div>
+          <button 
+            onClick={() => {
+              if (isEditing) setEditingWifi(null);
+              else {
+                setEditingWifi(String(node.node_id));
+                setWifiInput({ ssid: config?.current?.ssid || "", password: "" });
+              }
+            }}
+            className={cn(
+              "p-1.5 rounded-md border transition-all",
+              isEditing ? "bg-blue-500/20 border-blue-500/50 text-blue-400" : "bg-zinc-800/50 border-zinc-700 text-zinc-500 hover:text-zinc-300"
+            )}
+          >
+            <Settings className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {isEditing ? (
+        <div className="mb-6 space-y-3 rounded-md bg-zinc-950/50 border border-zinc-800/50 p-3 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Update WiFi Config</span>
+            {config?.prev && (
+              <button 
+                onClick={() => handleUpdateWifi(node.node_id, config.prev?.ssid, config.prev?.password)}
+                className="flex items-center gap-1 text-[9px] font-bold text-amber-500/80 hover:text-amber-500 transition-colors uppercase"
+              >
+                <Undo2 className="h-2.5 w-2.5" />
+                Rollback to {config.prev.ssid}
+              </button>
+            )}
+          </div>
+          <div className="space-y-2">
+            <div className="relative">
+              <input 
+                type="text" 
+                placeholder="WiFi SSID"
+                value={wifiInput.ssid}
+                onChange={(e) => setWifiInput({ ...wifiInput, ssid: e.target.value })}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-blue-500/50"
+              />
+            </div>
+            <input 
+              type="password" 
+              placeholder="WiFi Password"
+              value={wifiInput.password}
+              onChange={(e) => setWifiInput({ ...wifiInput, password: e.target.value })}
+              className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-blue-500/50"
+            />
+            <button 
+              disabled={isUpdatingWifi || !wifiInput.ssid || !wifiInput.password}
+              onClick={() => handleUpdateWifi(node.node_id)}
+              className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white text-[10px] font-bold uppercase tracking-widest py-2 rounded transition-colors flex items-center justify-center gap-2"
+            >
+              {isUpdatingWifi ? <Loader2 className="h-3 w-3 animate-spin" /> : "Deploy Config"}
+            </button>
+            {config?.current && (
+              <p className="text-[9px] text-zinc-500 mt-2 italic">
+                Currently assigned: <span className="text-zinc-400">{config.current.ssid}</span>
+              </p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-y-6 gap-x-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-zinc-500">
+              <Thermometer className="h-3 w-3" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider">Temperature</span>
+            </div>
+            <p className="text-2xl font-semibold tracking-tight text-white">{node.temp}<span className="text-sm text-zinc-500 ml-0.5">°C</span></p>
+          </div>
+          
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-zinc-500">
+              <Droplets className="h-3 w-3" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider">Humidity</span>
+            </div>
+            <p className="text-2xl font-semibold tracking-tight text-white">{node.hum}<span className="text-sm text-zinc-500 ml-0.5">%</span></p>
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-zinc-500">
+              <Wifi className="h-3 w-3" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider">Signal Strength</span>
+            </div>
+            <p className={cn(
+              "text-sm font-medium font-mono",
+              rssiDisplay.color
+            )}>
+              {isOnline && node.rssi ? `${node.rssi} dBm` : "---"} <span className="text-[10px] opacity-70 ml-1">({rssiDisplay.label})</span>
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-zinc-500">
+              <Compass className="h-3 w-3" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider">Orientation</span>
+            </div>
+            <p className="text-sm font-medium text-white font-mono">
+              P: {node.pitch.toFixed(1)}° <span className="text-zinc-600 mx-1">/</span> R: {node.roll.toFixed(1)}°
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-zinc-500">
+              <Wind className="h-3 w-3" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider">Smoke Analysis</span>
+            </div>
+            <p className={cn(
+              "text-xs font-bold uppercase tracking-widest",
+              node.smoke_digital ? "text-red-400" : "text-emerald-400"
+            )}>
+              {node.smoke_digital ? "CRITICAL ALERT" : "ATMOSPHERE CLEAR"}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {ai && !isEditing && (
+        <div className="mt-6 pt-4 border-t border-zinc-800/50">
+          <div className="flex items-center gap-2 mb-3">
+            <Brain className="h-3.5 w-3.5 text-blue-400" />
+            <span className="text-[10px] font-bold text-blue-400/80 uppercase tracking-[0.2em]">Live AI Prediction</span>
+          </div>
+          
+          <div className="flex items-center justify-between bg-blue-500/5 border border-blue-500/10 rounded-md p-2">
+            <div>
+              <span className="text-[9px] font-medium text-zinc-500 uppercase tracking-wider block mb-0.5">Classification</span>
+              <span className={cn(
+                "text-xs font-bold uppercase tracking-wider",
+                ai.prediction === "NORMAL" ? "text-emerald-400" : "text-amber-400"
+              )}>
+                {ai.prediction.replace('_', ' ')}
+              </span>
+            </div>
+            <div className="text-right">
+              <span className="text-[9px] font-medium text-zinc-500 uppercase tracking-wider block mb-0.5">Confidence</span>
+              <span className="text-[10px] font-mono font-bold text-blue-400">
+                {Math.round(ai.confidence * 100)}%
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {!isEditing && (
+        <div className="mt-6 h-1 w-full bg-zinc-800 rounded-full overflow-hidden">
+          <div 
+            className={cn(
+              "h-full transition-all duration-1000",
+              node.smoke_analog > 2000 ? "bg-red-500" : "bg-blue-500"
+            )}
+            style={{ width: `${Math.min(100, (node.smoke_analog / 4095) * 100)}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function Dashboard() {
   const [reports, setReports] = useState<NodeReport[]>([]);
   const [nodes, setNodes] = useState<Record<string, NodeReport>>({});
@@ -221,231 +466,6 @@ export default function Dashboard() {
 
   const dangerNodes = onlineNodes.filter(n => n.danger);
 
-  const getRssiDisplay = (rssi?: number, isOnline?: boolean) => {
-    if (!isOnline || rssi === undefined) return { icon: WifiOff, color: "text-zinc-500", label: "OFFLINE" };
-    if (rssi >= -50) return { icon: Wifi, color: "text-emerald-500", label: "Excellent" };
-    if (rssi >= -70) return { icon: Wifi, color: "text-blue-500", label: "Good" };
-    if (rssi >= -85) return { icon: Wifi, color: "text-amber-500", label: "Fair" };
-    return { icon: Wifi, color: "text-red-500", label: "Weak" };
-  };
-
-  const NodeCard = ({ node }: { node: NodeReport }) => {
-    const ai = aiPredictions[node.node_id];
-    const isOnline = (now.getTime() - new Date(node.inserted_at).getTime()) < STALE_THRESHOLD;
-    const rssiDisplay = getRssiDisplay(node.rssi, isOnline);
-    const lastSeen = formatDistanceToNow(new Date(node.inserted_at), { addSuffix: true });
-    const isEditing = editingWifi === String(node.node_id);
-    const config = wifiConfigs[node.node_id];
-
-    return (
-      <div 
-        key={node.node_id} 
-        className={cn(
-          "group relative rounded-lg border p-5 transition-all duration-300 shadow-subtle hover:translate-y-[-2px]",
-          node.danger 
-            ? "border-red-500/50 bg-red-500/5 hover:bg-red-500/10" 
-            : !isOnline 
-              ? "border-zinc-900 bg-zinc-900/10 opacity-60 grayscale-[0.5]"
-              : "border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900/60 hover:border-zinc-700"
-        )}
-      >
-        <div className="flex items-start justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className={cn(
-              "flex items-center justify-center h-10 w-10 rounded-lg bg-zinc-900 border border-zinc-800",
-              node.danger ? "border-red-500/30" : !isOnline ? "border-zinc-900" : "border-zinc-800"
-            )}>
-              {node.type === "receiver" ? (
-                <Server className={cn("h-5 w-5", isOnline ? "text-amber-500" : "text-zinc-600")} />
-              ) : (
-                <Activity className={cn("h-5 w-5", node.danger ? "text-red-500" : isOnline ? "text-blue-500" : "text-zinc-600")} />
-              )}
-            </div>
-            <div>
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">
-                {node.type === "receiver" ? "System Hub" : "Device Unit"}
-              </span>
-              <h3 className="text-xl font-bold text-white leading-tight">
-                {typeof node.node_id === 'number' ? `Node ${String(node.node_id).padStart(2, '0')}` : node.node_id}
-              </h3>
-            </div>
-          </div>
-          <div className="flex flex-col items-end gap-2">
-            <div className="text-right">
-              <div className="flex items-center justify-end gap-1.5 mb-1">
-                <rssiDisplay.icon className={cn("h-3.5 w-3.5", rssiDisplay.color)} />
-                <span className={cn("text-[10px] font-bold uppercase tracking-wider", rssiDisplay.color)}>
-                  {isOnline && node.rssi ? `${node.rssi} dBm` : rssiDisplay.label}
-                </span>
-              </div>
-              <div className="flex items-center justify-end gap-1.5">
-                <Clock className="h-3 w-3 text-zinc-500" />
-                <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-tight">
-                  {lastSeen}
-                </span>
-              </div>
-            </div>
-            <button 
-              onClick={() => {
-                if (isEditing) setEditingWifi(null);
-                else {
-                  setEditingWifi(String(node.node_id));
-                  setWifiInput({ ssid: config?.current?.ssid || "", password: "" });
-                }
-              }}
-              className={cn(
-                "p-1.5 rounded-md border transition-all",
-                isEditing ? "bg-blue-500/20 border-blue-500/50 text-blue-400" : "bg-zinc-800/50 border-zinc-700 text-zinc-500 hover:text-zinc-300"
-              )}
-            >
-              <Settings className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {isEditing ? (
-          <div className="mb-6 space-y-3 rounded-md bg-zinc-950/50 border border-zinc-800/50 p-3 animate-in fade-in slide-in-from-top-2">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Update WiFi Config</span>
-              {config?.prev && (
-                <button 
-                  onClick={() => handleUpdateWifi(node.node_id, config.prev?.ssid, config.prev?.password)}
-                  className="flex items-center gap-1 text-[9px] font-bold text-amber-500/80 hover:text-amber-500 transition-colors uppercase"
-                >
-                  <Undo2 className="h-2.5 w-2.5" />
-                  Rollback to {config.prev.ssid}
-                </button>
-              )}
-            </div>
-            <div className="space-y-2">
-              <div className="relative">
-                <input 
-                  type="text" 
-                  placeholder="WiFi SSID"
-                  value={wifiInput.ssid}
-                  onChange={(e) => setWifiInput(prev => ({ ...prev, ssid: e.target.value }))}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-blue-500/50"
-                />
-              </div>
-              <input 
-                type="password" 
-                placeholder="WiFi Password"
-                value={wifiInput.password}
-                onChange={(e) => setWifiInput(prev => ({ ...prev, password: e.target.value }))}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-blue-500/50"
-              />
-              <button 
-                disabled={isUpdatingWifi || !wifiInput.ssid || !wifiInput.password}
-                onClick={() => handleUpdateWifi(node.node_id)}
-                className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white text-[10px] font-bold uppercase tracking-widest py-2 rounded transition-colors flex items-center justify-center gap-2"
-              >
-                {isUpdatingWifi ? <Loader2 className="h-3 w-3 animate-spin" /> : "Deploy Config"}
-              </button>
-              {config?.current && (
-                <p className="text-[9px] text-zinc-500 mt-2 italic">
-                  Currently assigned: <span className="text-zinc-400">{config.current.ssid}</span>
-                </p>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-y-6 gap-x-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-1.5 text-zinc-500">
-                <Thermometer className="h-3 w-3" />
-                <span className="text-[10px] font-semibold uppercase tracking-wider">Temperature</span>
-              </div>
-              <p className="text-2xl font-semibold tracking-tight text-white">{node.temp}<span className="text-sm text-zinc-500 ml-0.5">°C</span></p>
-            </div>
-            
-            <div className="space-y-1">
-              <div className="flex items-center gap-1.5 text-zinc-500">
-                <Droplets className="h-3 w-3" />
-                <span className="text-[10px] font-semibold uppercase tracking-wider">Humidity</span>
-              </div>
-              <p className="text-2xl font-semibold tracking-tight text-white">{node.hum}<span className="text-sm text-zinc-500 ml-0.5">%</span></p>
-            </div>
-
-            <div className="space-y-1">
-              <div className="flex items-center gap-1.5 text-zinc-500">
-                <Wifi className="h-3 w-3" />
-                <span className="text-[10px] font-semibold uppercase tracking-wider">Signal Strength</span>
-              </div>
-              <p className={cn(
-                "text-sm font-medium font-mono",
-                rssiDisplay.color
-              )}>
-                {isOnline && node.rssi ? `${node.rssi} dBm` : "---"} <span className="text-[10px] opacity-70 ml-1">({rssiDisplay.label})</span>
-              </p>
-            </div>
-
-            <div className="space-y-1">
-              <div className="flex items-center gap-1.5 text-zinc-500">
-                <Compass className="h-3 w-3" />
-                <span className="text-[10px] font-semibold uppercase tracking-wider">Orientation</span>
-              </div>
-              <p className="text-sm font-medium text-white font-mono">
-                P: {node.pitch.toFixed(1)}° <span className="text-zinc-600 mx-1">/</span> R: {node.roll.toFixed(1)}°
-              </p>
-            </div>
-
-            <div className="space-y-1">
-              <div className="flex items-center gap-1.5 text-zinc-500">
-                <Wind className="h-3 w-3" />
-                <span className="text-[10px] font-semibold uppercase tracking-wider">Smoke Analysis</span>
-              </div>
-              <p className={cn(
-                "text-xs font-bold uppercase tracking-widest",
-                node.smoke_digital ? "text-red-400" : "text-emerald-400"
-              )}>
-                {node.smoke_digital ? "CRITICAL ALERT" : "ATMOSPHERE CLEAR"}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {ai && !isEditing && (
-          <div className="mt-6 pt-4 border-t border-zinc-800/50">
-            <div className="flex items-center gap-2 mb-3">
-              <Brain className="h-3.5 w-3.5 text-blue-400" />
-              <span className="text-[10px] font-bold text-blue-400/80 uppercase tracking-[0.2em]">Live AI Prediction</span>
-            </div>
-            
-            <div className="flex items-center justify-between bg-blue-500/5 border border-blue-500/10 rounded-md p-2">
-              <div>
-                <span className="text-[9px] font-medium text-zinc-500 uppercase tracking-wider block mb-0.5">Classification</span>
-                <span className={cn(
-                  "text-xs font-bold uppercase tracking-wider",
-                  ai.prediction === "NORMAL" ? "text-emerald-400" : "text-amber-400"
-                )}>
-                  {ai.prediction.replace('_', ' ')}
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-[9px] font-medium text-zinc-500 uppercase tracking-wider block mb-0.5">Confidence</span>
-                <span className="text-[10px] font-mono font-bold text-blue-400">
-                  {Math.round(ai.confidence * 100)}%
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-        
-        {!isEditing && (
-          <div className="mt-6 h-1 w-full bg-zinc-800 rounded-full overflow-hidden">
-            <div 
-              className={cn(
-                "h-full transition-all duration-1000",
-                node.smoke_analog > 2000 ? "bg-red-500" : "bg-blue-500"
-              )}
-              style={{ width: `${Math.min(100, (node.smoke_analog / 4095) * 100)}%` }}
-            />
-          </div>
-        )}
-      </div>
-    );
-  };
-
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#0a0a0a] text-[#f4f4f5]">
@@ -501,7 +521,21 @@ export default function Dashboard() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {sensorNodes.length > 0 ? (
-                sensorNodes.map((node) => <NodeCard key={node.node_id} node={node} />)
+                sensorNodes.map((node) => (
+                  <NodeCard 
+                    key={node.node_id} 
+                    node={node} 
+                    ai={aiPredictions[node.node_id]}
+                    isOnline={(now.getTime() - new Date(node.inserted_at).getTime()) < STALE_THRESHOLD}
+                    config={wifiConfigs[node.node_id]}
+                    editingWifi={editingWifi}
+                    setEditingWifi={setEditingWifi}
+                    wifiInput={wifiInput}
+                    setWifiInput={setWifiInput}
+                    handleUpdateWifi={handleUpdateWifi}
+                    isUpdatingWifi={isUpdatingWifi}
+                  />
+                ))
               ) : (
                 <div className="col-span-full py-10 flex flex-col items-center justify-center rounded-lg border border-dashed border-zinc-800 bg-zinc-900/10">
                   <Activity className="h-6 w-6 text-zinc-700 mb-2 animate-pulse" />
@@ -520,7 +554,21 @@ export default function Dashboard() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {receiverNodes.length > 0 ? (
-                receiverNodes.map((node) => <NodeCard key={node.node_id} node={node} />)
+                receiverNodes.map((node) => (
+                  <NodeCard 
+                    key={node.node_id} 
+                    node={node} 
+                    ai={aiPredictions[node.node_id]}
+                    isOnline={(now.getTime() - new Date(node.inserted_at).getTime()) < STALE_THRESHOLD}
+                    config={wifiConfigs[node.node_id]}
+                    editingWifi={editingWifi}
+                    setEditingWifi={setEditingWifi}
+                    wifiInput={wifiInput}
+                    setWifiInput={setWifiInput}
+                    handleUpdateWifi={handleUpdateWifi}
+                    isUpdatingWifi={isUpdatingWifi}
+                  />
+                ))
               ) : (
                 <div className="col-span-full py-10 flex flex-col items-center justify-center rounded-lg border border-dashed border-zinc-800 bg-zinc-900/10">
                   <Server className="h-6 w-6 text-zinc-700 mb-2 animate-pulse" />
