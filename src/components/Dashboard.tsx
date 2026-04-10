@@ -48,6 +48,7 @@ interface NodeReport {
   smoke_digital: boolean;
   danger: boolean;
   rssi?: number;
+  edge_ai_class?: number;
   inserted_at: string;
 }
 
@@ -73,7 +74,6 @@ const getRssiDisplay = (rssi?: number, isOnline?: boolean) => {
 
 interface NodeCardProps {
   node: NodeReport;
-  ai?: AIPrediction;
   isOnline: boolean;
   config?: { current: WiFiConfig; prev?: WiFiConfig };
   editingWifi: string | null;
@@ -86,7 +86,6 @@ interface NodeCardProps {
 
 const NodeCard = ({ 
   node, 
-  ai, 
   isOnline, 
   config, 
   editingWifi, 
@@ -100,35 +99,51 @@ const NodeCard = ({
   const lastSeen = formatDistanceToNow(new Date(node.inserted_at), { addSuffix: true });
   const isEditing = editingWifi === String(node.node_id);
 
+  // Edge AI classification logic (0=Normal, 1=Warning, 2=Hazard)
+  const getEdgeAiLabel = (cls?: number) => {
+    switch(cls) {
+      case 1: return { label: "WARNING", color: "text-amber-400", bg: "bg-amber-500/5" };
+      case 2: return { label: "HAZARD", color: "text-red-400", bg: "bg-red-500/5" };
+      default: return { label: "NORMAL", color: "text-emerald-400", bg: "bg-emerald-500/5" };
+    }
+  };
+
+  const edgeAi = getEdgeAiLabel(node.edge_ai_class);
+
   return (
     <div 
       className={cn(
         "group relative rounded-lg border p-5 transition-all duration-300 shadow-subtle hover:translate-y-[-2px]",
-        node.danger 
+        node.danger || node.edge_ai_class === 2
           ? "border-red-500/50 bg-red-500/5 hover:bg-red-500/10" 
-          : !isOnline 
-            ? "border-zinc-900 bg-zinc-900/10 opacity-60 grayscale-[0.5]"
-            : "border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900/60 hover:border-zinc-700"
+          : node.edge_ai_class === 1
+            ? "border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10"
+            : !isOnline 
+              ? "border-zinc-900 bg-zinc-900/10 opacity-60 grayscale-[0.5]"
+              : "border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900/60 hover:border-zinc-700"
       )}
     >
       <div className="flex items-start justify-between mb-6">
         <div className="flex items-center gap-3">
           <div className={cn(
             "flex items-center justify-center h-10 w-10 rounded-lg bg-zinc-900 border border-zinc-800",
-            node.danger ? "border-red-500/30" : !isOnline ? "border-zinc-900" : "border-zinc-800"
+            (node.danger || node.edge_ai_class === 2) ? "border-red-500/30" : isOnline ? "border-zinc-800" : "border-zinc-900"
           )}>
             {node.type === "receiver" ? (
               <Server className={cn("h-5 w-5", isOnline ? "text-amber-500" : "text-zinc-600")} />
             ) : (
-              <Activity className={cn("h-5 w-5", node.danger ? "text-red-500" : isOnline ? "text-blue-500" : "text-zinc-600")} />
+              <Activity className={cn("h-5 w-5", (node.danger || node.edge_ai_class === 2) ? "text-red-500" : isOnline ? "text-blue-500" : "text-zinc-600")} />
             )}
           </div>
           <div>
             <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">
-              {node.type === "receiver" ? "System Hub" : "Device Unit"}
+              {node.type === "receiver" ? "System Gateway" : "Device Unit"}
             </span>
             <h3 className="text-xl font-bold text-white leading-tight">
-              {typeof node.node_id === 'number' ? `Node ${String(node.node_id).padStart(2, '0')}` : node.node_id}
+              {node.type === "receiver" 
+                ? `Gateway ${String(node.node_id).replace(/[^0-9]/g, '') || node.node_id}`
+                : (typeof node.node_id === 'number' ? `Node ${String(node.node_id).padStart(2, '0')}` : node.node_id)
+              }
             </h3>
           </div>
         </div>
@@ -266,27 +281,27 @@ const NodeCard = ({
         </div>
       )}
 
-      {ai && !isEditing && (
+      {!isEditing && (
         <div className="mt-6 pt-4 border-t border-zinc-800/50">
           <div className="flex items-center gap-2 mb-3">
             <Brain className="h-3.5 w-3.5 text-blue-400" />
-            <span className="text-[10px] font-bold text-blue-400/80 uppercase tracking-[0.2em]">Live AI Prediction</span>
+            <span className="text-[10px] font-bold text-blue-400/80 uppercase tracking-[0.2em]">Edge AI Inference</span>
           </div>
           
-          <div className="flex items-center justify-between bg-blue-500/5 border border-blue-500/10 rounded-md p-2">
+          <div className={cn("flex items-center justify-between border border-white/5 rounded-md p-2", edgeAi.bg)}>
             <div>
               <span className="text-[9px] font-medium text-zinc-500 uppercase tracking-wider block mb-0.5">Classification</span>
               <span className={cn(
                 "text-xs font-bold uppercase tracking-wider",
-                ai.prediction === "NORMAL" ? "text-emerald-400" : "text-amber-400"
+                edgeAi.color
               )}>
-                {ai.prediction.replace('_', ' ')}
+                {edgeAi.label}
               </span>
             </div>
             <div className="text-right">
-              <span className="text-[9px] font-medium text-zinc-500 uppercase tracking-wider block mb-0.5">Confidence</span>
-              <span className="text-[10px] font-mono font-bold text-blue-400">
-                {Math.round(ai.confidence * 100)}%
+              <span className="text-[9px] font-medium text-zinc-500 uppercase tracking-wider block mb-0.5">Source</span>
+              <span className="text-[10px] font-mono font-bold text-blue-400/80 uppercase">
+                ON-DEVICE
               </span>
             </div>
           </div>
@@ -298,7 +313,7 @@ const NodeCard = ({
           <div 
             className={cn(
               "h-full transition-all duration-1000",
-              node.smoke_analog > 2000 ? "bg-red-500" : "bg-blue-500"
+              node.smoke_analog > 2000 || node.edge_ai_class === 2 ? "bg-red-500" : node.edge_ai_class === 1 ? "bg-amber-500" : "bg-blue-500"
             )}
             style={{ width: `${Math.min(100, (node.smoke_analog / 4095) * 100)}%` }}
           />
@@ -326,7 +341,8 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch AI prediction from our endpoint
+  /* 
+  // Commented out Cloud AI logic as we are using Edge AI (Decision Tree: 0=Normal, 1=Warning, 2=Hazard)
   const fetchAiPrediction = useCallback(async (nodeId: string | number) => {
     try {
       const res = await fetch(`/api/ai?nodeId=${nodeId}`);
@@ -343,6 +359,7 @@ export default function Dashboard() {
       console.error("AI prediction fetch failed:", err);
     }
   }, []);
+  */
 
   const handleUpdateWifi = async (nodeId: string | number, ssid?: string, password?: string) => {
     setIsUpdatingWifi(true);
@@ -395,7 +412,7 @@ export default function Dashboard() {
         setLoading(false);
         
         // Trigger AI predictions for updated nodes
-        Object.keys(latestNodes).forEach(id => fetchAiPrediction(id));
+        // Object.keys(latestNodes).forEach(id => fetchAiPrediction(id));
       } else {
         setLoading(false);
       }
@@ -439,9 +456,10 @@ export default function Dashboard() {
       unsubscribeConfigs();
       unsubscribeReports();
     };
-  }, [fetchAiPrediction]);
+  }, []); // Removed fetchAiPrediction dependency
 
   // Periodically fetch AI predictions for active nodes as a fallback
+  /*
   useEffect(() => {
     const interval = setInterval(() => {
       const nodeIds = Object.keys(nodes);
@@ -452,6 +470,7 @@ export default function Dashboard() {
     
     return () => clearInterval(interval);
   }, [nodes, fetchAiPrediction]);
+  */
 
   const activeNodes = Object.values(nodes).sort((a, b) => String(a.node_id).localeCompare(String(b.node_id)));
   const sensorNodes = activeNodes.filter(n => !n.type || n.type === "sensor");
@@ -525,7 +544,6 @@ export default function Dashboard() {
                   <NodeCard 
                     key={node.node_id} 
                     node={node} 
-                    ai={aiPredictions[node.node_id]}
                     isOnline={(now.getTime() - new Date(node.inserted_at).getTime()) < STALE_THRESHOLD}
                     config={wifiConfigs[node.node_id]}
                     editingWifi={editingWifi}
@@ -558,7 +576,6 @@ export default function Dashboard() {
                   <NodeCard 
                     key={node.node_id} 
                     node={node} 
-                    ai={aiPredictions[node.node_id]}
                     isOnline={(now.getTime() - new Date(node.inserted_at).getTime()) < STALE_THRESHOLD}
                     config={wifiConfigs[node.node_id]}
                     editingWifi={editingWifi}

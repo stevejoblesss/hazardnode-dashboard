@@ -12,6 +12,7 @@ export const NodeRequestBody = z.object({
   smokeDigital: z.boolean(),
   danger: z.boolean(),
   rssi: z.number().optional(),
+  edgeAIClass: z.number().min(0).max(2).optional(),
 });
 
 export type NodeRequestBody = z.infer<typeof NodeRequestBody>;

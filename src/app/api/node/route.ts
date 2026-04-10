@@ -15,13 +15,21 @@ async function sendTelegramAlert(payload: any) {
 
   const isTilt = Math.abs(payload.pitch) > 30 || Math.abs(payload.roll) > 30;
   const isSmoke = payload.smoke_analog > 2000 || payload.smoke_digital;
-  const isDanger = payload.danger;
+  const isDanger = payload.danger || payload.edge_ai_class === 2;
+  const isWarning = payload.edge_ai_class === 1;
 
-  if (!isTilt && !isSmoke && !isDanger) return;
+  if (!isTilt && !isSmoke && !isDanger && !isWarning) return;
 
   let message = `🚨 *HAZARD ALERT: Node ${payload.node_id}* 🚨\n\n`;
   
   if (isDanger) message += `🔴 *CRITICAL DANGER DETECTED!*\n`;
+  else if (isWarning) message += `🟠 *WARNING: ABNORMAL ACTIVITY*\n`;
+
+  if (payload.edge_ai_class !== undefined) {
+    const labels = ["NORMAL", "WARNING", "HAZARD"];
+    message += `🧠 *Edge AI:* ${labels[payload.edge_ai_class]}\n`;
+  }
+  
   if (isSmoke) message += `💨 *SMOKE/GAS DETECTED:* ${payload.smoke_analog}\n`;
   if (isTilt) message += `📐 *TILT DETECTED:* P:${payload.pitch.toFixed(1)}° R:${payload.roll.toFixed(1)}°\n`;
   
@@ -136,6 +144,7 @@ export async function POST(req: NextRequest) {
     smoke_digital: parsedBody.data.smokeDigital,
     danger: parsedBody.data.danger,
     rssi: parsedBody.data.rssi || null,
+    edge_ai_class: parsedBody.data.edgeAIClass ?? 0,
     inserted_at: new Date().toISOString()
   };
 
