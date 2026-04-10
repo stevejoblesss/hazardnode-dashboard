@@ -3,10 +3,23 @@ import { db } from "@/lib/firebaseAdmin";
 
 export async function POST(req: NextRequest) {
   try {
-    const { nodeId, ssid, password } = await req.json();
+    const { nodeId, ssid, password, newNodeId } = await req.json();
 
-    if (!nodeId || !ssid || !password) {
-      return NextResponse.json({ error: "Missing nodeId, ssid, or password" }, { status: 400 });
+    if (!nodeId) {
+      return NextResponse.json({ error: "Missing nodeId" }, { status: 400 });
+    }
+
+    // Handle Node ID Rename
+    if (newNodeId && newNodeId !== nodeId) {
+      const nameRef = db.ref(`configs/${nodeId}/name`);
+      await nameRef.set(newNodeId);
+      console.log(`✅ Node ${nodeId} renamed to ${newNodeId}`);
+      return NextResponse.json({ success: true, renamed: true });
+    }
+
+    // Handle WiFi Update
+    if (!ssid || !password) {
+      return NextResponse.json({ error: "Missing ssid or password" }, { status: 400 });
     }
 
     const configRef = db.ref(`configs/${nodeId}/wifi`);

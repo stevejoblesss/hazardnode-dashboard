@@ -80,8 +80,12 @@ interface NodeCardProps {
   setEditingWifi: (id: string | null) => void;
   wifiInput: { ssid: string; password: string };
   setWifiInput: (input: { ssid: string; password: string }) => void;
+  nodeNameInput: string;
+  setNodeNameInput: (name: string) => void;
   handleUpdateWifi: (nodeId: string | number, ssid?: string, password?: string) => void;
+  handleRenameNode: (nodeId: string | number) => void;
   isUpdatingWifi: boolean;
+  isRenamingNode: boolean;
 }
 
 const NodeCard = ({ 
@@ -92,8 +96,12 @@ const NodeCard = ({
   setEditingWifi, 
   wifiInput, 
   setWifiInput, 
+  nodeNameInput,
+  setNodeNameInput,
   handleUpdateWifi, 
-  isUpdatingWifi 
+  handleRenameNode,
+  isUpdatingWifi,
+  isRenamingNode
 }: NodeCardProps) => {
   const rssiDisplay = getRssiDisplay(node.rssi, isOnline);
   const lastSeen = formatDistanceToNow(new Date(node.inserted_at), { addSuffix: true });
@@ -141,9 +149,9 @@ const NodeCard = ({
               {isReceiver ? "System Gateway" : "Device Unit"}
             </span>
             <h3 className="text-xl font-bold text-white leading-tight">
-              {isReceiver 
+              {config?.current?.name || (isReceiver 
                 ? `Gateway ${String(node.node_id).replace(/[^0-9]/g, '') || node.node_id}`
-                : (typeof node.node_id === 'number' ? `Node ${String(node.node_id).padStart(2, '0')}` : node.node_id)
+                : (typeof node.node_id === 'number' ? `Node ${String(node.node_id).padStart(2, '0')}` : node.node_id))
               }
             </h3>
           </div>
@@ -169,6 +177,7 @@ const NodeCard = ({
               else {
                 setEditingWifi(String(node.node_id));
                 setWifiInput({ ssid: config?.current?.ssid || "", password: "" });
+                setNodeNameInput(config?.current?.name || String(node.node_id));
               }
             }}
             className={cn(
@@ -182,48 +191,70 @@ const NodeCard = ({
       </div>
 
       {isEditing ? (
-        <div className="mb-6 space-y-3 rounded-md bg-zinc-950/50 border border-zinc-800/50 p-3 animate-in fade-in slide-in-from-top-2">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Update WiFi Config</span>
-            {config?.prev && (
-              <button 
-                onClick={() => handleUpdateWifi(node.node_id, config.prev?.ssid, config.prev?.password)}
-                className="flex items-center gap-1 text-[9px] font-bold text-amber-500/80 hover:text-amber-500 transition-colors uppercase"
-              >
-                <Undo2 className="h-2.5 w-2.5" />
-                Rollback to {config.prev.ssid}
-              </button>
-            )}
-          </div>
-          <div className="space-y-2">
-            <div className="relative">
+        <div className="mb-6 space-y-4 rounded-md bg-zinc-950/50 border border-zinc-800/50 p-3 animate-in fade-in slide-in-from-top-2">
+          <div className="space-y-2 pb-3 border-b border-zinc-800/50">
+            <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider block mb-1">Rename Node</span>
+            <div className="flex gap-2">
               <input 
                 type="text" 
-                placeholder="WiFi SSID"
-                value={wifiInput.ssid}
-                onChange={(e) => setWifiInput({ ...wifiInput, ssid: e.target.value })}
+                placeholder="New Node ID / Name"
+                value={nodeNameInput}
+                onChange={(e) => setNodeNameInput(e.target.value)}
+                className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-blue-500/50"
+              />
+              <button 
+                disabled={isRenamingNode || !nodeNameInput || nodeNameInput === (config?.current?.name || String(node.node_id))}
+                onClick={() => handleRenameNode(node.node_id)}
+                className="bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-900 disabled:text-zinc-600 px-3 rounded text-[10px] font-bold text-white transition-colors"
+              >
+                {isRenamingNode ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Update WiFi Config</span>
+              {config?.prev && (
+                <button 
+                  onClick={() => handleUpdateWifi(node.node_id, config.prev?.ssid, config.prev?.password)}
+                  className="flex items-center gap-1 text-[9px] font-bold text-amber-500/80 hover:text-amber-500 transition-colors uppercase"
+                >
+                  <Undo2 className="h-2.5 w-2.5" />
+                  Rollback to {config.prev.ssid}
+                </button>
+              )}
+            </div>
+            <div className="space-y-2">
+              <div className="relative">
+                <input 
+                  type="text" 
+                  placeholder="WiFi SSID"
+                  value={wifiInput.ssid}
+                  onChange={(e) => setWifiInput({ ...wifiInput, ssid: e.target.value })}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-blue-500/50"
+                />
+              </div>
+              <input 
+                type="password" 
+                placeholder="WiFi Password"
+                value={wifiInput.password}
+                onChange={(e) => setWifiInput({ ...wifiInput, password: e.target.value })}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-blue-500/50"
               />
+              <button 
+                disabled={isUpdatingWifi || !wifiInput.ssid || !wifiInput.password}
+                onClick={() => handleUpdateWifi(node.node_id)}
+                className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white text-[10px] font-bold uppercase tracking-widest py-2 rounded transition-colors flex items-center justify-center gap-2"
+              >
+                {isUpdatingWifi ? <Loader2 className="h-3 w-3 animate-spin" /> : "Deploy Config"}
+              </button>
+              {config?.current?.ssid && (
+                <p className="text-[9px] text-zinc-500 mt-2 italic">
+                  Currently assigned: <span className="text-zinc-400">{config.current.ssid}</span>
+                </p>
+              )}
             </div>
-            <input 
-              type="password" 
-              placeholder="WiFi Password"
-              value={wifiInput.password}
-              onChange={(e) => setWifiInput({ ...wifiInput, password: e.target.value })}
-              className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-blue-500/50"
-            />
-            <button 
-              disabled={isUpdatingWifi || !wifiInput.ssid || !wifiInput.password}
-              onClick={() => handleUpdateWifi(node.node_id)}
-              className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white text-[10px] font-bold uppercase tracking-widest py-2 rounded transition-colors flex items-center justify-center gap-2"
-            >
-              {isUpdatingWifi ? <Loader2 className="h-3 w-3 animate-spin" /> : "Deploy Config"}
-            </button>
-            {config?.current && (
-              <p className="text-[9px] text-zinc-500 mt-2 italic">
-                Currently assigned: <span className="text-zinc-400">{config.current.ssid}</span>
-              </p>
-            )}
           </div>
         </div>
       ) : !isReceiver ? (
@@ -332,7 +363,9 @@ export default function Dashboard() {
   const [editingWifi, setEditingWifi] = useState<string | null>(null);
   const [wifiConfigs, setWifiConfigs] = useState<Record<string, { current: WiFiConfig, prev?: WiFiConfig }>>({});
   const [wifiInput, setWifiInput] = useState({ ssid: "", password: "" });
+  const [nodeNameInput, setNodeNameInput] = useState("");
   const [isUpdatingWifi, setIsUpdatingWifi] = useState(false);
+  const [isRenamingNode, setIsRenamingNode] = useState(false);
 
   // Periodically update the "now" time to keep "Last Seen" and "Online" counts accurate
   useEffect(() => {
@@ -379,6 +412,25 @@ export default function Dashboard() {
       console.error("WiFi update failed:", err);
     } finally {
       setIsUpdatingWifi(false);
+    }
+  };
+
+  const handleRenameNode = async (nodeId: string | number) => {
+    setIsRenamingNode(true);
+    try {
+      const res = await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nodeId, newNodeId: nodeNameInput }),
+      });
+      if (res.ok) {
+        setEditingWifi(null);
+        setNodeNameInput("");
+      }
+    } catch (err) {
+      console.error("Node rename failed:", err);
+    } finally {
+      setIsRenamingNode(false);
     }
   };
 
@@ -549,8 +601,12 @@ export default function Dashboard() {
                     setEditingWifi={setEditingWifi}
                     wifiInput={wifiInput}
                     setWifiInput={setWifiInput}
+                    nodeNameInput={nodeNameInput}
+                    setNodeNameInput={setNodeNameInput}
                     handleUpdateWifi={handleUpdateWifi}
+                    handleRenameNode={handleRenameNode}
                     isUpdatingWifi={isUpdatingWifi}
+                    isRenamingNode={isRenamingNode}
                   />
                 ))
               ) : (
@@ -581,8 +637,12 @@ export default function Dashboard() {
                     setEditingWifi={setEditingWifi}
                     wifiInput={wifiInput}
                     setWifiInput={setWifiInput}
+                    nodeNameInput={nodeNameInput}
+                    setNodeNameInput={setNodeNameInput}
                     handleUpdateWifi={handleUpdateWifi}
+                    handleRenameNode={handleRenameNode}
                     isUpdatingWifi={isUpdatingWifi}
+                    isRenamingNode={isRenamingNode}
                   />
                 ))
               ) : (
