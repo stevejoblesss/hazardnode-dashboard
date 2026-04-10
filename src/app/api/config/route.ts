@@ -13,6 +13,15 @@ export async function POST(req: NextRequest) {
     if (newNodeId && newNodeId !== nodeId) {
       const nameRef = db.ref(`configs/${nodeId}/name`);
       await nameRef.set(newNodeId);
+      
+      // Log the rename
+      await db.ref("system_logs").push().set({
+        node_id: nodeId,
+        message: `Node renamed to: ${newNodeId}`,
+        timestamp: new Date().toISOString(),
+        type: "success"
+      });
+
       console.log(`✅ Node ${nodeId} renamed to ${newNodeId}`);
       return NextResponse.json({ success: true, renamed: true });
     }
@@ -40,6 +49,14 @@ export async function POST(req: NextRequest) {
       ssid,
       password,
       updated_at: new Date().toISOString()
+    });
+
+    // Log the WiFi update
+    await db.ref("system_logs").push().set({
+      node_id: nodeId,
+      message: `WiFi Config Updated -> SSID: ${ssid}`,
+      timestamp: new Date().toISOString(),
+      type: "success"
     });
 
     console.log(`✅ WiFi config updated for Node ${nodeId}`);

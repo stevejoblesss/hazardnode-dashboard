@@ -21,7 +21,8 @@ import {
   Settings,
   Server,
   Loader2,
-  Undo2
+  Undo2,
+  Terminal
 } from "lucide-react";
 import { 
   XAxis, 
@@ -60,8 +61,17 @@ interface AIPrediction {
 interface WiFiConfig {
   ssid: string;
   password?: string;
+  name?: string;
   updated_at?: string;
   archived_at?: string;
+}
+
+interface LogEntry {
+  id: string;
+  message: string;
+  timestamp: string;
+  type: "info" | "error" | "success" | "warn";
+  node_id: string | number;
 }
 
 const getRssiDisplay = (rssi?: number, isOnline?: boolean) => {
@@ -366,6 +376,7 @@ export default function Dashboard() {
   const [nodeNameInput, setNodeNameInput] = useState("");
   const [isUpdatingWifi, setIsUpdatingWifi] = useState(false);
   const [isRenamingNode, setIsRenamingNode] = useState(false);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
 
   // Periodically update the "now" time to keep "Last Seen" and "Online" counts accurate
   useEffect(() => {
@@ -480,7 +491,7 @@ export default function Dashboard() {
         const mappedConfigs: Record<string, { current: WiFiConfig, prev?: WiFiConfig }> = {};
         Object.keys(data).forEach(id => {
           mappedConfigs[id] = {
-            current: data[id].wifi,
+            current: data[id].wifi ? { ...data[id].wifi, name: data[id].name } : { name: data[id].name, ssid: "" },
             prev: data[id].prev_wifi
           };
         });
@@ -501,11 +512,24 @@ export default function Dashboard() {
       }
     });
 
+    // 4. Listen for system logs (Serial Monitor)
+    const logsRef = query(ref(rtdb, "system_logs"), orderByKey(), limitToLast(50));
+    const unsubscribeLogs = onValue(logsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const logsList = Object.keys(data)
+          .map(key => ({ ...data[key], id: key }))
+          .reverse();
+        setLogs(logsList);
+      }
+    });
+
     return () => {
       unsubscribeConn();
       unsubscribeNodes();
       unsubscribeConfigs();
       unsubscribeReports();
+      unsubscribeLogs();
     };
   }, []); // Removed fetchAiPrediction dependency
 
@@ -704,6 +728,34 @@ export default function Dashboard() {
                   />
                 </AreaChart>
               </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/20 p-6 shadow-subtle">
+            <h2 className="mb-4 text-sm font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+              <Terminal className="h-3.5 w-3.5 text-blue-500" /> System Logs (Serial Monitor)
+            </h2>
+            <div className="bg-black/40 rounded-md border border-zinc-800/50 p-3 font-mono text-[10px] space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+              {logs.length > 0 ? (
+                logs.map((log) => (
+                  <div key={log.id} className="flex gap-2 leading-relaxed">
+                    <span className="text-zinc-600 shrink-0">[{format(new Date(log.timestamp), "HH:mm:ss")}]</span>
+                    <span className={cn(
+                      "font-bold shrink-0",
+                      log.type === "error" ? "text-red-500" : 
+                      log.type === "success" ? "text-emerald-500" : 
+                      log.type === "warn" ? "text-amber-500" : "text-blue-500"
+                    )}>
+                      {String(log.node_id).toUpperCase()}:
+                    </span>
+                    <span className="text-zinc-300 break-all">{log.message}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="py-10 text-center text-zinc-700 italic">
+                  No active log stream...
+                </div>
+              )}
             </div>
           </div>
 

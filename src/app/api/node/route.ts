@@ -154,11 +154,24 @@ export async function POST(req: NextRequest) {
     const newReportRef = reportsRef.push();
     await newReportRef.set(payload);
 
-    // 2. Update latest node state for quick dashboard access
-    const nodeStateRef = db.ref(`nodes/${payload.node_id}/latest`);
-    await nodeStateRef.set(payload);
+    // 2. Add to System Logs (Serial Monitor)
+    const logsRef = db.ref("system_logs");
+    const newLogRef = logsRef.push();
+    await newLogRef.set({
+      node_id: payload.node_id,
+      message: `Telemetry received: T:${payload.temp}°C H:${payload.hum}% R:${payload.rssi || '?' }`,
+      timestamp: payload.inserted_at,
+      type: payload.danger ? "error" : payload.edge_ai_class > 0 ? "warn" : "info"
+    });
 
-    // 3. Send Telegram alert if necessary
+    // 3. Update the node's individual state for the dashboard summary
+    const nodeRef = db.ref(`nodes/${payload.node_id}`);
+    await nodeRef.update({
+      latest: payload,
+      last_seen: payload.timestamp,
+    });
+
+    // 4. Send Telegram alert if necessary
     try {
       await sendTelegramAlert(payload);
     } catch (err) {
