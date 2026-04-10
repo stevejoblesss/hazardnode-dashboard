@@ -98,6 +98,7 @@ const NodeCard = ({
   const rssiDisplay = getRssiDisplay(node.rssi, isOnline);
   const lastSeen = formatDistanceToNow(new Date(node.inserted_at), { addSuffix: true });
   const isEditing = editingWifi === String(node.node_id);
+  const isReceiver = node.type === "receiver";
 
   // Edge AI classification logic (0=Normal, 1=Warning, 2=Hazard)
   const getEdgeAiLabel = (cls?: number) => {
@@ -114,22 +115,22 @@ const NodeCard = ({
     <div 
       className={cn(
         "group relative rounded-lg border p-5 transition-all duration-300 shadow-subtle hover:translate-y-[-2px]",
-        node.danger || node.edge_ai_class === 2
+        !isReceiver && (node.danger || node.edge_ai_class === 2)
           ? "border-red-500/50 bg-red-500/5 hover:bg-red-500/10" 
-          : node.edge_ai_class === 1
+          : !isReceiver && node.edge_ai_class === 1
             ? "border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10"
             : !isOnline 
               ? "border-zinc-900 bg-zinc-900/10 opacity-60 grayscale-[0.5]"
               : "border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900/60 hover:border-zinc-700"
       )}
     >
-      <div className="flex items-start justify-between mb-6">
+      <div className={cn("flex items-start justify-between", !isReceiver || isEditing ? "mb-6" : "")}>
         <div className="flex items-center gap-3">
           <div className={cn(
             "flex items-center justify-center h-10 w-10 rounded-lg bg-zinc-900 border border-zinc-800",
-            (node.danger || node.edge_ai_class === 2) ? "border-red-500/30" : isOnline ? "border-zinc-800" : "border-zinc-900"
+            !isReceiver && (node.danger || node.edge_ai_class === 2) ? "border-red-500/30" : isOnline ? "border-zinc-800" : "border-zinc-900"
           )}>
-            {node.type === "receiver" ? (
+            {isReceiver ? (
               <Server className={cn("h-5 w-5", isOnline ? "text-amber-500" : "text-zinc-600")} />
             ) : (
               <Activity className={cn("h-5 w-5", (node.danger || node.edge_ai_class === 2) ? "text-red-500" : isOnline ? "text-blue-500" : "text-zinc-600")} />
@@ -137,10 +138,10 @@ const NodeCard = ({
           </div>
           <div>
             <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">
-              {node.type === "receiver" ? "System Gateway" : "Device Unit"}
+              {isReceiver ? "System Gateway" : "Device Unit"}
             </span>
             <h3 className="text-xl font-bold text-white leading-tight">
-              {node.type === "receiver" 
+              {isReceiver 
                 ? `Gateway ${String(node.node_id).replace(/[^0-9]/g, '') || node.node_id}`
                 : (typeof node.node_id === 'number' ? `Node ${String(node.node_id).padStart(2, '0')}` : node.node_id)
               }
@@ -225,100 +226,98 @@ const NodeCard = ({
             )}
           </div>
         </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-y-6 gap-x-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-zinc-500">
-              <Thermometer className="h-3 w-3" />
-              <span className="text-[10px] font-semibold uppercase tracking-wider">Temperature</span>
+      ) : !isReceiver ? (
+        <>
+          <div className="grid grid-cols-2 gap-y-6 gap-x-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 text-zinc-500">
+                <Thermometer className="h-3 w-3" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider">Temperature</span>
+              </div>
+              <p className="text-2xl font-semibold tracking-tight text-white">{node.temp}<span className="text-sm text-zinc-500 ml-0.5">°C</span></p>
             </div>
-            <p className="text-2xl font-semibold tracking-tight text-white">{node.temp}<span className="text-sm text-zinc-500 ml-0.5">°C</span></p>
-          </div>
-          
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-zinc-500">
-              <Droplets className="h-3 w-3" />
-              <span className="text-[10px] font-semibold uppercase tracking-wider">Humidity</span>
+            
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 text-zinc-500">
+                <Droplets className="h-3 w-3" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider">Humidity</span>
+              </div>
+              <p className="text-2xl font-semibold tracking-tight text-white">{node.hum}<span className="text-sm text-zinc-500 ml-0.5">%</span></p>
             </div>
-            <p className="text-2xl font-semibold tracking-tight text-white">{node.hum}<span className="text-sm text-zinc-500 ml-0.5">%</span></p>
-          </div>
 
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-zinc-500">
-              <Wifi className="h-3 w-3" />
-              <span className="text-[10px] font-semibold uppercase tracking-wider">Signal Strength</span>
-            </div>
-            <p className={cn(
-              "text-sm font-medium font-mono",
-              rssiDisplay.color
-            )}>
-              {isOnline && node.rssi ? `${node.rssi} dBm` : "---"} <span className="text-[10px] opacity-70 ml-1">({rssiDisplay.label})</span>
-            </p>
-          </div>
-
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-zinc-500">
-              <Compass className="h-3 w-3" />
-              <span className="text-[10px] font-semibold uppercase tracking-wider">Orientation</span>
-            </div>
-            <p className="text-sm font-medium text-white font-mono">
-              P: {node.pitch.toFixed(1)}° <span className="text-zinc-600 mx-1">/</span> R: {node.roll.toFixed(1)}°
-            </p>
-          </div>
-
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-zinc-500">
-              <Wind className="h-3 w-3" />
-              <span className="text-[10px] font-semibold uppercase tracking-wider">Smoke Analysis</span>
-            </div>
-            <p className={cn(
-              "text-xs font-bold uppercase tracking-widest",
-              node.smoke_digital ? "text-red-400" : "text-emerald-400"
-            )}>
-              {node.smoke_digital ? "CRITICAL ALERT" : "ATMOSPHERE CLEAR"}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {!isEditing && (
-        <div className="mt-6 pt-4 border-t border-zinc-800/50">
-          <div className="flex items-center gap-2 mb-3">
-            <Brain className="h-3.5 w-3.5 text-blue-400" />
-            <span className="text-[10px] font-bold text-blue-400/80 uppercase tracking-[0.2em]">Edge AI Inference</span>
-          </div>
-          
-          <div className={cn("flex items-center justify-between border border-white/5 rounded-md p-2", edgeAi.bg)}>
-            <div>
-              <span className="text-[9px] font-medium text-zinc-500 uppercase tracking-wider block mb-0.5">Classification</span>
-              <span className={cn(
-                "text-xs font-bold uppercase tracking-wider",
-                edgeAi.color
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 text-zinc-500">
+                <Wifi className="h-3 w-3" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider">Signal Strength</span>
+              </div>
+              <p className={cn(
+                "text-sm font-medium font-mono",
+                rssiDisplay.color
               )}>
-                {edgeAi.label}
-              </span>
+                {isOnline && node.rssi ? `${node.rssi} dBm` : "---"} <span className="text-[10px] opacity-70 ml-1">({rssiDisplay.label})</span>
+              </p>
             </div>
-            <div className="text-right">
-              <span className="text-[9px] font-medium text-zinc-500 uppercase tracking-wider block mb-0.5">Source</span>
-              <span className="text-[10px] font-mono font-bold text-blue-400/80 uppercase">
-                ON-DEVICE
-              </span>
+
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 text-zinc-500">
+                <Compass className="h-3 w-3" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider">Orientation</span>
+              </div>
+              <p className="text-sm font-medium text-white font-mono">
+                P: {node.pitch.toFixed(1)}° <span className="text-zinc-600 mx-1">/</span> R: {node.roll.toFixed(1)}°
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 text-zinc-500">
+                <Wind className="h-3 w-3" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider">Smoke Analysis</span>
+              </div>
+              <p className={cn(
+                "text-xs font-bold uppercase tracking-widest",
+                node.smoke_digital ? "text-red-400" : "text-emerald-400"
+              )}>
+                {node.smoke_digital ? "CRITICAL ALERT" : "ATMOSPHERE CLEAR"}
+              </p>
             </div>
           </div>
-        </div>
-      )}
-      
-      {!isEditing && (
-        <div className="mt-6 h-1 w-full bg-zinc-800 rounded-full overflow-hidden">
-          <div 
-            className={cn(
-              "h-full transition-all duration-1000",
-              node.smoke_analog > 2000 || node.edge_ai_class === 2 ? "bg-red-500" : node.edge_ai_class === 1 ? "bg-amber-500" : "bg-blue-500"
-            )}
-            style={{ width: `${Math.min(100, (node.smoke_analog / 4095) * 100)}%` }}
-          />
-        </div>
-      )}
+
+          <div className="mt-6 pt-4 border-t border-zinc-800/50">
+            <div className="flex items-center gap-2 mb-3">
+              <Brain className="h-3.5 w-3.5 text-blue-400" />
+              <span className="text-[10px] font-bold text-blue-400/80 uppercase tracking-[0.2em]">Edge AI Inference</span>
+            </div>
+            
+            <div className={cn("flex items-center justify-between border border-white/5 rounded-md p-2", edgeAi.bg)}>
+              <div>
+                <span className="text-[9px] font-medium text-zinc-500 uppercase tracking-wider block mb-0.5">Classification</span>
+                <span className={cn(
+                  "text-xs font-bold uppercase tracking-wider",
+                  edgeAi.color
+                )}>
+                  {edgeAi.label}
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-[9px] font-medium text-zinc-500 uppercase tracking-wider block mb-0.5">Source</span>
+                <span className="text-[10px] font-mono font-bold text-blue-400/80 uppercase">
+                  ON-DEVICE
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 h-1 w-full bg-zinc-800 rounded-full overflow-hidden">
+            <div 
+              className={cn(
+                "h-full transition-all duration-1000",
+                node.smoke_analog > 2000 || node.edge_ai_class === 2 ? "bg-red-500" : node.edge_ai_class === 1 ? "bg-amber-500" : "bg-blue-500"
+              )}
+              style={{ width: `${Math.min(100, (node.smoke_analog / 4095) * 100)}%` }}
+            />
+          </div>
+        </>
+      ) : null}
     </div>
   );
 };
