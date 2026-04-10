@@ -116,35 +116,35 @@ async function forwardToEdgeImpulse(payload: Record<string, any>) {
 }
 
 export async function POST(req: NextRequest) {
-  let body;
-  try {
-    body = await req.json();
-    console.log("📥 Received report:", JSON.stringify(body, null, 2));
-  } catch (err) {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
-
+  const body = await req.json();
+  console.log("📥 Incoming Telemetry:", JSON.stringify(body));
+  
   const parsedBody = NodeRequestBody.safeParse(body);
   const now = Date.now();
 
   if (!parsedBody.success) {
-    const { error, ...rest } = parsedBody;
-    return NextResponse.json({ error: z.flattenError(error), ...rest }, { status: 400 });
+    const errorDetail = parsedBody.error.format();
+    console.error("❌ Validation Failed:", JSON.stringify(errorDetail));
+    return NextResponse.json({ 
+      error: "Validation failed", 
+      details: errorDetail,
+      received: body 
+    }, { status: 400 });
   }
 
   const payload = {
     timestamp: parsedBody.data.timestamp ?? now,
-    node_id: parsedBody.data.nodeID,
+    node_id: parsedBody.data.node_id ?? parsedBody.data.nodeID ?? "unknown",
     type: parsedBody.data.type || "sensor",
     temp: parsedBody.data.temp,
     hum: parsedBody.data.hum,
     pitch: parsedBody.data.pitch,
     roll: parsedBody.data.roll,
-    smoke_analog: parsedBody.data.smokeAnalog,
-    smoke_digital: parsedBody.data.smokeDigital,
+    smoke_analog: parsedBody.data.smoke_analog ?? parsedBody.data.smokeAnalog ?? 0,
+    smoke_digital: parsedBody.data.smoke_digital ?? parsedBody.data.smokeDigital ?? false,
     danger: parsedBody.data.danger,
     rssi: parsedBody.data.rssi || null,
-    edge_ai_class: parsedBody.data.edgeAIClass ?? 0,
+    edge_ai_class: parsedBody.data.edge_ai_class ?? parsedBody.data.edgeAIClass ?? 0,
     inserted_at: new Date().toISOString()
   };
 
