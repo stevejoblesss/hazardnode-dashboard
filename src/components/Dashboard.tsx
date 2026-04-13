@@ -40,7 +40,7 @@ interface NodeReport {
   id: string;
   timestamp: number;
   node_id: string | number;
-  type?: "sensor" | "receiver";
+  type?: "sensor" | "receiver" | "sender";
   temp: number;
   hum: number;
   pitch: number;
