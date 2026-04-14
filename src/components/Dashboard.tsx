@@ -14,14 +14,10 @@ import {
   History,
   LayoutGrid,
   Zap,
-  Brain,
   Wifi,
   WifiOff,
   Clock,
-  Settings,
   Server,
-  Loader2,
-  Undo2,
   Terminal
 } from "lucide-react";
 import { 
@@ -53,19 +49,6 @@ interface NodeReport {
   inserted_at: string;
 }
 
-interface AIPrediction {
-  prediction: string;
-  confidence: number;
-}
-
-interface WiFiConfig {
-  ssid: string;
-  password?: string;
-  name?: string;
-  updated_at?: string;
-  archived_at?: string;
-}
-
 interface LogEntry {
   id: string;
   message: string;
@@ -85,37 +68,14 @@ const getRssiDisplay = (rssi?: number, isOnline?: boolean) => {
 interface NodeCardProps {
   node: NodeReport;
   isOnline: boolean;
-  config?: { current: WiFiConfig; prev?: WiFiConfig };
-  editingWifi: string | null;
-  setEditingWifi: (id: string | null) => void;
-  wifiInput: { ssid: string; password: string };
-  setWifiInput: (input: { ssid: string; password: string }) => void;
-  nodeNameInput: string;
-  setNodeNameInput: (name: string) => void;
-  handleUpdateWifi: (nodeId: string | number, ssid?: string, password?: string) => void;
-  handleRenameNode: (nodeId: string | number) => void;
-  isUpdatingWifi: boolean;
-  isRenamingNode: boolean;
 }
 
 const NodeCard = ({ 
   node, 
-  isOnline, 
-  config, 
-  editingWifi, 
-  setEditingWifi, 
-  wifiInput, 
-  setWifiInput, 
-  nodeNameInput,
-  setNodeNameInput,
-  handleUpdateWifi, 
-  handleRenameNode,
-  isUpdatingWifi,
-  isRenamingNode
+  isOnline
 }: NodeCardProps) => {
   const rssiDisplay = getRssiDisplay(node.rssi, isOnline);
   const lastSeen = formatDistanceToNow(new Date(node.inserted_at), { addSuffix: true });
-  const isEditing = editingWifi === String(node.node_id);
   const isReceiver = node.type === "receiver";
 
   // Edge AI classification logic (0=Normal, 1=Warning, 2=Hazard)
@@ -142,7 +102,7 @@ const NodeCard = ({
               : "border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900/60 hover:border-zinc-700"
       )}
     >
-      <div className={cn("flex items-start justify-between", !isReceiver || isEditing ? "mb-6" : "")}>
+      <div className={cn("flex items-start justify-between", !isReceiver ? "mb-6" : "")}>
         <div className="flex items-center gap-3">
           <div className={cn(
             "flex items-center justify-center h-10 w-10 rounded-lg bg-zinc-900 border border-zinc-800",
@@ -159,9 +119,9 @@ const NodeCard = ({
               {isReceiver ? "System Gateway" : "Device Unit"}
             </span>
             <h3 className="text-xl font-bold text-white leading-tight">
-              {config?.current?.name || (isReceiver 
+              {isReceiver 
                 ? `Gateway ${String(node.node_id).replace(/[^0-9]/g, '') || node.node_id}`
-                : (typeof node.node_id === 'number' ? `Node ${String(node.node_id).padStart(2, '0')}` : node.node_id))
+                : (typeof node.node_id === 'number' ? `Node ${String(node.node_id).padStart(2, '0')}` : node.node_id)
               }
             </h3>
           </div>
@@ -181,93 +141,10 @@ const NodeCard = ({
               </span>
             </div>
           </div>
-          <button 
-            onClick={() => {
-              if (isEditing) setEditingWifi(null);
-              else {
-                setEditingWifi(String(node.node_id));
-                setWifiInput({ ssid: config?.current?.ssid || "", password: "" });
-                setNodeNameInput(config?.current?.name || String(node.node_id));
-              }
-            }}
-            className={cn(
-              "p-1.5 rounded-md border transition-all",
-              isEditing ? "bg-blue-500/20 border-blue-500/50 text-blue-400" : "bg-zinc-800/50 border-zinc-700 text-zinc-500 hover:text-zinc-300"
-            )}
-          >
-            <Settings className="h-3.5 w-3.5" />
-          </button>
         </div>
       </div>
 
-      {isEditing ? (
-        <div className="mb-6 space-y-4 rounded-md bg-zinc-950/50 border border-zinc-800/50 p-3 animate-in fade-in slide-in-from-top-2">
-          <div className="space-y-2 pb-3 border-b border-zinc-800/50">
-            <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider block mb-1">Rename Node</span>
-            <div className="flex gap-2">
-              <input 
-                type="text" 
-                placeholder="New Node ID / Name"
-                value={nodeNameInput}
-                onChange={(e) => setNodeNameInput(e.target.value)}
-                className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-blue-500/50"
-              />
-              <button 
-                disabled={isRenamingNode || !nodeNameInput || nodeNameInput === (config?.current?.name || String(node.node_id))}
-                onClick={() => handleRenameNode(node.node_id)}
-                className="bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-900 disabled:text-zinc-600 px-3 rounded text-[10px] font-bold text-white transition-colors"
-              >
-                {isRenamingNode ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Update WiFi Config</span>
-              {config?.prev && (
-                <button 
-                  onClick={() => handleUpdateWifi(node.node_id, config.prev?.ssid, config.prev?.password)}
-                  className="flex items-center gap-1 text-[9px] font-bold text-amber-500/80 hover:text-amber-500 transition-colors uppercase"
-                >
-                  <Undo2 className="h-2.5 w-2.5" />
-                  Rollback to {config.prev.ssid}
-                </button>
-              )}
-            </div>
-            <div className="space-y-2">
-              <div className="relative">
-                <input 
-                  type="text" 
-                  placeholder="WiFi SSID"
-                  value={wifiInput.ssid}
-                  onChange={(e) => setWifiInput({ ...wifiInput, ssid: e.target.value })}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-blue-500/50"
-                />
-              </div>
-              <input 
-                type="password" 
-                placeholder="WiFi Password"
-                value={wifiInput.password}
-                onChange={(e) => setWifiInput({ ...wifiInput, password: e.target.value })}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-blue-500/50"
-              />
-              <button 
-                disabled={isUpdatingWifi || !wifiInput.ssid || !wifiInput.password}
-                onClick={() => handleUpdateWifi(node.node_id)}
-                className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white text-[10px] font-bold uppercase tracking-widest py-2 rounded transition-colors flex items-center justify-center gap-2"
-              >
-                {isUpdatingWifi ? <Loader2 className="h-3 w-3 animate-spin" /> : "Deploy Config"}
-              </button>
-              {config?.current?.ssid && (
-                <p className="text-[9px] text-zinc-500 mt-2 italic">
-                  Currently assigned: <span className="text-zinc-400">{config.current.ssid}</span>
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : !isReceiver ? (
+      {!isReceiver ? (
         <>
           <div className="grid grid-cols-2 gap-y-6 gap-x-4">
             <div className="space-y-1">
@@ -325,7 +202,7 @@ const NodeCard = ({
 
           <div className="mt-6 pt-4 border-t border-zinc-800/50">
             <div className="flex items-center gap-2 mb-3">
-              <Brain className="h-3.5 w-3.5 text-blue-400" />
+              <Activity className="h-3.5 w-3.5 text-blue-400" />
               <span className="text-[10px] font-bold text-blue-400/80 uppercase tracking-[0.2em]">Edge AI Inference</span>
             </div>
             
@@ -368,14 +245,7 @@ export default function Dashboard() {
   const [nodes, setNodes] = useState<Record<string, NodeReport>>({});
   const [loading, setLoading] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "error" | "reconnecting">("connecting");
-  const [aiPredictions, setAiPredictions] = useState<Record<string, AIPrediction>>({});
   const [now, setNow] = useState(new Date());
-  const [editingWifi, setEditingWifi] = useState<string | null>(null);
-  const [wifiConfigs, setWifiConfigs] = useState<Record<string, { current: WiFiConfig, prev?: WiFiConfig }>>({});
-  const [wifiInput, setWifiInput] = useState({ ssid: "", password: "" });
-  const [nodeNameInput, setNodeNameInput] = useState("");
-  const [isUpdatingWifi, setIsUpdatingWifi] = useState(false);
-  const [isRenamingNode, setIsRenamingNode] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
 
   // Periodically update the "now" time to keep "Last Seen" and "Online" counts accurate
@@ -383,67 +253,6 @@ export default function Dashboard() {
     const timer = setInterval(() => setNow(new Date()), 2000); // Update every 2s for 10s threshold
     return () => clearInterval(timer);
   }, []);
-
-  /* 
-  // Commented out Cloud AI logic as we are using Edge AI (Decision Tree: 0=Normal, 1=Warning, 2=Hazard)
-  const fetchAiPrediction = useCallback(async (nodeId: string | number) => {
-    try {
-      const res = await fetch(`/api/ai?nodeId=${nodeId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setAiPredictions(prev => {
-          if (prev[nodeId]?.prediction === data.prediction && prev[nodeId]?.confidence === data.confidence) {
-            return prev;
-          }
-          return { ...prev, [nodeId]: data };
-        });
-      }
-    } catch (err) {
-      console.error("AI prediction fetch failed:", err);
-    }
-  }, []);
-  */
-
-  const handleUpdateWifi = async (nodeId: string | number, ssid?: string, password?: string) => {
-    setIsUpdatingWifi(true);
-    const targetSsid = ssid || wifiInput.ssid;
-    const targetPassword = password || wifiInput.password;
-
-    try {
-      const res = await fetch("/api/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nodeId, ssid: targetSsid, password: targetPassword }),
-      });
-      if (res.ok) {
-        setEditingWifi(null);
-        setWifiInput({ ssid: "", password: "" });
-      }
-    } catch (err) {
-      console.error("WiFi update failed:", err);
-    } finally {
-      setIsUpdatingWifi(false);
-    }
-  };
-
-  const handleRenameNode = async (nodeId: string | number) => {
-    setIsRenamingNode(true);
-    try {
-      const res = await fetch("/api/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nodeId, newNodeId: nodeNameInput }),
-      });
-      if (res.ok) {
-        setEditingWifi(null);
-        setNodeNameInput("");
-      }
-    } catch (err) {
-      console.error("Node rename failed:", err);
-    } finally {
-      setIsRenamingNode(false);
-    }
-  };
 
   useEffect(() => {
     // Firebase handles connection state automatically. We'll listen to the special .info/connected path.
@@ -472,9 +281,6 @@ export default function Dashboard() {
         
         setNodes(latestNodes);
         setLoading(false);
-        
-        // Trigger AI predictions for updated nodes
-        // Object.keys(latestNodes).forEach(id => fetchAiPrediction(id));
       } else {
         setLoading(false);
       }
@@ -483,23 +289,7 @@ export default function Dashboard() {
       setConnectionStatus("error");
     });
 
-    // 2. Listen for WiFi configurations
-    const configsRef = ref(rtdb, "configs");
-    const unsubscribeConfigs = onValue(configsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        const mappedConfigs: Record<string, { current: WiFiConfig, prev?: WiFiConfig }> = {};
-        Object.keys(data).forEach(id => {
-          mappedConfigs[id] = {
-            current: data[id].wifi ? { ...data[id].wifi, name: data[id].name } : { name: data[id].name, ssid: "" },
-            prev: data[id].prev_wifi
-          };
-        });
-        setWifiConfigs(mappedConfigs);
-      }
-    });
-
-    // 3. Listen for historical reports (last 100)
+    // 2. Listen for historical reports (last 100)
     const reportsRef = query(ref(rtdb, "node_reports"), orderByKey(), limitToLast(100));
     const unsubscribeReports = onValue(reportsRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -512,7 +302,7 @@ export default function Dashboard() {
       }
     });
 
-    // 4. Listen for system logs (Serial Monitor)
+    // 3. Listen for system logs (Serial Monitor)
     const logsRef = query(ref(rtdb, "system_logs"), orderByKey(), limitToLast(50));
     const unsubscribeLogs = onValue(logsRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -527,7 +317,6 @@ export default function Dashboard() {
     return () => {
       unsubscribeConn();
       unsubscribeNodes();
-      unsubscribeConfigs();
       unsubscribeReports();
       unsubscribeLogs();
     };
@@ -620,17 +409,6 @@ export default function Dashboard() {
                     key={node.node_id} 
                     node={node} 
                     isOnline={(now.getTime() - new Date(node.inserted_at).getTime()) < STALE_THRESHOLD}
-                    config={wifiConfigs[node.node_id]}
-                    editingWifi={editingWifi}
-                    setEditingWifi={setEditingWifi}
-                    wifiInput={wifiInput}
-                    setWifiInput={setWifiInput}
-                    nodeNameInput={nodeNameInput}
-                    setNodeNameInput={setNodeNameInput}
-                    handleUpdateWifi={handleUpdateWifi}
-                    handleRenameNode={handleRenameNode}
-                    isUpdatingWifi={isUpdatingWifi}
-                    isRenamingNode={isRenamingNode}
                   />
                 ))
               ) : (
@@ -656,17 +434,6 @@ export default function Dashboard() {
                     key={node.node_id} 
                     node={node} 
                     isOnline={(now.getTime() - new Date(node.inserted_at).getTime()) < STALE_THRESHOLD}
-                    config={wifiConfigs[node.node_id]}
-                    editingWifi={editingWifi}
-                    setEditingWifi={setEditingWifi}
-                    wifiInput={wifiInput}
-                    setWifiInput={setWifiInput}
-                    nodeNameInput={nodeNameInput}
-                    setNodeNameInput={setNodeNameInput}
-                    handleUpdateWifi={handleUpdateWifi}
-                    handleRenameNode={handleRenameNode}
-                    isUpdatingWifi={isUpdatingWifi}
-                    isRenamingNode={isRenamingNode}
                   />
                 ))
               ) : (
