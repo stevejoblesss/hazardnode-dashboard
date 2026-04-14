@@ -337,7 +337,7 @@ export default function Dashboard() {
   */
 
   const activeNodes = Object.values(nodes).sort((a, b) => String(a.node_id).localeCompare(String(b.node_id)));
-  const sensorNodes = activeNodes.filter(n => !n.type || n.type === "sensor");
+  const sensorNodes = activeNodes.filter(n => !n.type || n.type === "sensor" || n.type === "sender");
   const receiverNodes = activeNodes.filter(n => n.type === "receiver");
   
   // A node is considered "online" if it has sent a report in the last 15 seconds (10s delay + 5s buffer)
@@ -399,7 +399,7 @@ export default function Dashboard() {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
-                <Activity className="h-4 w-4 text-blue-500" /> Active Sensor Nodes
+                <Activity className="h-4 w-4 text-blue-500" /> Active Device Units
               </h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

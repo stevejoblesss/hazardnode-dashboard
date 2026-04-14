@@ -53,68 +53,6 @@ async function sendTelegramAlert(payload: any) {
   }
 }
 
-// Edge Impulse Automatic Ingestion (Throttled to 1 sample per minute)
-async function forwardToEdgeImpulse(payload: Record<string, any>) {
-  const apiKey = process.env.EDGE_IMPULSE_API_KEY;
-  if (!apiKey) {
-    console.warn("⚠️ EDGE_IMPULSE_API_KEY is missing in environment variables. Data push skipped.");
-    return;
-  }
-
-  try {
-    // 1. Check throttling in Firebase
-    const nodeRef = db.ref(`nodes/${payload.node_id}`);
-    const snapshot = await nodeRef.child("last_ei_push").get();
-    const lastPush = snapshot.val();
-    
-    const oneMinuteAgo = Date.now() - 60000;
-
-    if (lastPush && lastPush > oneMinuteAgo) {
-      console.log(`⏳ Throttling Edge Impulse push for Node ${payload.node_id} (Last push < 1m ago)`);
-      return;
-    }
-
-    console.log(`🚀 Attempting to send fresh data to Edge Impulse for Node ${payload.node_id}...`);
-    
-    const response = await fetch("https://ingestion.edgeimpulse.com/api/training/data", {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "x-file-name": `node_${payload.node_id}_${Date.now()}.json`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        protected: { ver: "v1", alg: "HS256" },
-        signature: "empty",
-        payload: {
-          device_name: `node_${payload.node_id}`,
-          device_type: "esp32",
-          interval_ms: 0,
-          sensors: [
-            { name: "temp", units: "C" },
-            { name: "hum", units: "%" },
-            { name: "pitch", units: "deg" },
-            { name: "roll", units: "deg" },
-            { name: "smoke", units: "analog" },
-          ],
-          values: [[payload.temp, payload.hum, payload.pitch, payload.roll, payload.smoke_analog]],
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ Edge Impulse ingestion failed (Status: ${response.status}):`, errorText);
-    } else {
-      console.log(`✅ Successfully forwarded Node ${payload.node_id} data to Edge Impulse.`);
-      // Update last push time
-      await nodeRef.update({ last_ei_push: Date.now() });
-    }
-  } catch (err) {
-    console.error("❌ Critical Edge Impulse Ingestion Error:", err);
-  }
-}
-
 export async function POST(req: NextRequest) {
   const body = await req.json();
   console.log("📥 Incoming Telemetry:", JSON.stringify(body));
@@ -176,13 +114,6 @@ export async function POST(req: NextRequest) {
       await sendTelegramAlert(payload);
     } catch (err) {
       console.error("⚠️ Telegram background task error:", err);
-    }
-
-    // Automatically push to Edge Impulse if configured
-    try {
-      await forwardToEdgeImpulse(payload);
-    } catch (err) {
-      console.error("⚠️ Edge Impulse background task error (non-critical):", err);
     }
 
     return NextResponse.json({ success: true, id: newReportRef.key }, { status: 200 });
