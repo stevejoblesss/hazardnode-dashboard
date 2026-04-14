@@ -77,6 +77,7 @@ const NodeCard = ({
   const rssiDisplay = getRssiDisplay(node.rssi, isOnline);
   const lastSeen = formatDistanceToNow(new Date(node.inserted_at), { addSuffix: true });
   const isReceiver = node.type === "receiver";
+  const isSender = node.type === "sender";
 
   // Edge AI classification logic (0=Normal, 1=Warning, 2=Hazard)
   const getEdgeAiLabel = (cls?: number) => {
@@ -129,9 +130,12 @@ const NodeCard = ({
         <div className="flex flex-col items-end gap-2">
           <div className="text-right">
             <div className="flex items-center justify-end gap-1.5 mb-1">
-              <rssiDisplay.icon className={cn("h-3.5 w-3.5", rssiDisplay.color)} />
+              {!isSender && <rssiDisplay.icon className={cn("h-3.5 w-3.5", rssiDisplay.color)} />}
               <span className={cn("text-[10px] font-bold uppercase tracking-wider", rssiDisplay.color)}>
-                {isOnline && node.rssi ? `${node.rssi} dBm` : rssiDisplay.label}
+                {isSender 
+                  ? (isOnline ? "ONLINE" : "OFFLINE")
+                  : (isOnline && node.rssi ? `${node.rssi} dBm` : rssiDisplay.label)
+                }
               </span>
             </div>
             <div className="flex items-center justify-end gap-1.5">
@@ -167,18 +171,20 @@ const NodeCard = ({
               </p>
             </div>
 
-            <div className="space-y-1">
-              <div className="flex items-center gap-1.5 text-zinc-500">
-                <Wifi className="h-3 w-3" />
-                <span className="text-[10px] font-semibold uppercase tracking-wider">Signal Strength</span>
+            {!isSender && (
+              <div className="space-y-1">
+                <div className="flex items-center gap-1.5 text-zinc-500">
+                  <Wifi className="h-3 w-3" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider">Signal Strength</span>
+                </div>
+                <p className={cn(
+                  "text-sm font-medium font-mono",
+                  rssiDisplay.color
+                )}>
+                  {isOnline && node.rssi ? `${node.rssi} dBm` : "---"} <span className="text-[10px] opacity-70 ml-1">({rssiDisplay.label})</span>
+                </p>
               </div>
-              <p className={cn(
-                "text-sm font-medium font-mono",
-                rssiDisplay.color
-              )}>
-                {isOnline && node.rssi ? `${node.rssi} dBm` : "---"} <span className="text-[10px] opacity-70 ml-1">({rssiDisplay.label})</span>
-              </p>
-            </div>
+            )}
 
             <div className="space-y-1">
               <div className="flex items-center gap-1.5 text-zinc-500">
@@ -344,11 +350,14 @@ export default function Dashboard() {
   const sensorNodes = activeNodes.filter(n => !n.type || n.type === "sensor" || n.type === "sender");
   const receiverNodes = activeNodes.filter(n => n.type === "receiver");
   
-  // A node is considered "online" if it has sent a report in the last 15 seconds (10s delay + 5s buffer)
+  // Staleness thresholds: 15s for standard nodes, 30s for receivers
   const STALE_THRESHOLD = 15 * 1000; 
+  const RECEIVER_STALE_THRESHOLD = 30 * 1000;
+
   const onlineNodes = activeNodes.filter(n => {
     const lastSeenTime = new Date(n.inserted_at).getTime();
-    return (now.getTime() - lastSeenTime) < STALE_THRESHOLD;
+    const threshold = n.type === "receiver" ? RECEIVER_STALE_THRESHOLD : STALE_THRESHOLD;
+    return (now.getTime() - lastSeenTime) < threshold;
   });
 
   const dangerNodes = onlineNodes.filter(n => n.danger);
@@ -408,13 +417,16 @@ export default function Dashboard() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {sensorNodes.length > 0 ? (
-                sensorNodes.map((node) => (
-                  <NodeCard 
-                    key={node.node_id} 
-                    node={node} 
-                    isOnline={(now.getTime() - new Date(node.inserted_at).getTime()) < STALE_THRESHOLD}
-                  />
-                ))
+                sensorNodes.map((node) => {
+                  const isOnline = (now.getTime() - new Date(node.inserted_at).getTime()) < STALE_THRESHOLD;
+                  return (
+                    <NodeCard 
+                      key={node.node_id} 
+                      node={node} 
+                      isOnline={isOnline}
+                    />
+                  );
+                })
               ) : (
                 <div className="col-span-full py-10 flex flex-col items-center justify-center rounded-lg border border-dashed border-zinc-800 bg-zinc-900/10">
                   <Activity className="h-6 w-6 text-zinc-700 mb-2 animate-pulse" />
@@ -433,13 +445,16 @@ export default function Dashboard() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {receiverNodes.length > 0 ? (
-                receiverNodes.map((node) => (
-                  <NodeCard 
-                    key={node.node_id} 
-                    node={node} 
-                    isOnline={(now.getTime() - new Date(node.inserted_at).getTime()) < STALE_THRESHOLD}
-                  />
-                ))
+                receiverNodes.map((node) => {
+                  const isOnline = (now.getTime() - new Date(node.inserted_at).getTime()) < RECEIVER_STALE_THRESHOLD;
+                  return (
+                    <NodeCard 
+                      key={node.node_id} 
+                      node={node} 
+                      isOnline={isOnline}
+                    />
+                  );
+                })
               ) : (
                 <div className="col-span-full py-10 flex flex-col items-center justify-center rounded-lg border border-dashed border-zinc-800 bg-zinc-900/10">
                   <Server className="h-6 w-6 text-zinc-700 mb-2 animate-pulse" />
