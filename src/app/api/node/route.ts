@@ -70,21 +70,51 @@ export async function POST(req: NextRequest) {
     }, { status: 400 });
   }
 
-  const payload = {
+  const type = parsedBody.data.type || "sensor";
+  
+  // Construct payload based on node type
+  const payload: any = {
     timestamp: parsedBody.data.timestamp ?? now,
     node_id: parsedBody.data.node_id ?? parsedBody.data.nodeID ?? "unknown",
-    type: parsedBody.data.type || "sensor",
-    temp: parsedBody.data.temp,
-    hum: parsedBody.data.hum,
-    pitch: parsedBody.data.pitch,
-    roll: parsedBody.data.roll,
-    smoke_analog: parsedBody.data.smoke_analog ?? parsedBody.data.smokeAnalog ?? 0,
-    smoke_digital: parsedBody.data.smoke_digital ?? parsedBody.data.smokeDigital ?? false,
-    danger: parsedBody.data.danger,
-    rssi: parsedBody.data.rssi || null,
-    edge_ai_class: parsedBody.data.edge_ai_class ?? parsedBody.data.edgeAIClass ?? 0,
+    type: type,
     inserted_at: new Date().toISOString()
   };
+
+  if (type === "receiver") {
+    // Receivers ONLY send RSSI - no sensor data to avoid "0" values in telemetry
+    payload.rssi = parsedBody.data.rssi || null;
+    // We explicitly omit or set sensor fields to null
+    payload.temp = null;
+    payload.hum = null;
+    payload.pitch = 0;
+    payload.roll = 0;
+    payload.smoke_analog = 0;
+    payload.smoke_digital = false;
+    payload.danger = false;
+    payload.edge_ai_class = 0;
+  } else if (type === "sender") {
+    // Senders send sensor data but NO RSSI (per user request)
+    payload.temp = parsedBody.data.temp;
+    payload.hum = parsedBody.data.hum;
+    payload.pitch = parsedBody.data.pitch;
+    payload.roll = parsedBody.data.roll;
+    payload.smoke_analog = parsedBody.data.smoke_analog ?? parsedBody.data.smokeAnalog ?? 0;
+    payload.smoke_digital = parsedBody.data.smoke_digital ?? parsedBody.data.smokeDigital ?? false;
+    payload.danger = parsedBody.data.danger;
+    payload.edge_ai_class = parsedBody.data.edge_ai_class ?? parsedBody.data.edgeAIClass ?? 0;
+    payload.rssi = null; 
+  } else {
+    // Standard sensor nodes have everything
+    payload.temp = parsedBody.data.temp;
+    payload.hum = parsedBody.data.hum;
+    payload.pitch = parsedBody.data.pitch;
+    payload.roll = parsedBody.data.roll;
+    payload.smoke_analog = parsedBody.data.smoke_analog ?? parsedBody.data.smokeAnalog ?? 0;
+    payload.smoke_digital = parsedBody.data.smoke_digital ?? parsedBody.data.smokeDigital ?? false;
+    payload.danger = parsedBody.data.danger;
+    payload.rssi = parsedBody.data.rssi || null;
+    payload.edge_ai_class = parsedBody.data.edge_ai_class ?? parsedBody.data.edgeAIClass ?? 0;
+  }
 
   try {
     // 1. Save to historical reports list
@@ -95,9 +125,13 @@ export async function POST(req: NextRequest) {
     // 2. Add to System Logs (Serial Monitor)
     const logsRef = db.ref("system_logs");
     const newLogRef = logsRef.push();
+    const logMessage = type === "receiver" 
+      ? `Gateway signal check: RSSI ${payload.rssi || '?' } dBm`
+      : `Telemetry received: ${payload.temp !== null ? `T:${payload.temp}°C H:${payload.hum}%` : "No telemetry data"}${payload.rssi !== null ? ` R:${payload.rssi}` : ""}`;
+    
     await newLogRef.set({
       node_id: payload.node_id,
-      message: `Telemetry received: T:${payload.temp}°C H:${payload.hum}% R:${payload.rssi || '?' }`,
+      message: logMessage,
       timestamp: payload.inserted_at,
       type: payload.danger ? "error" : payload.edge_ai_class > 0 ? "warn" : "info"
     });

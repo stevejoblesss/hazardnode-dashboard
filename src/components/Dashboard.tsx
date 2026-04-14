@@ -57,8 +57,8 @@ interface LogEntry {
   node_id: string | number;
 }
 
-const getRssiDisplay = (rssi?: number, isOnline?: boolean) => {
-  if (!isOnline || rssi === undefined) return { icon: WifiOff, color: "text-zinc-500", label: "OFFLINE" };
+const getRssiDisplay = (rssi?: number | null, isOnline?: boolean) => {
+  if (!isOnline || rssi === undefined || rssi === null) return { icon: WifiOff, color: "text-zinc-500", label: "OFFLINE" };
   if (rssi >= -50) return { icon: Wifi, color: "text-emerald-500", label: "Excellent" };
   if (rssi >= -70) return { icon: Wifi, color: "text-blue-500", label: "Good" };
   if (rssi >= -85) return { icon: Wifi, color: "text-amber-500", label: "Fair" };
@@ -152,7 +152,9 @@ const NodeCard = ({
                 <Thermometer className="h-3 w-3" />
                 <span className="text-[10px] font-semibold uppercase tracking-wider">Temperature</span>
               </div>
-              <p className="text-2xl font-semibold tracking-tight text-white">{node.temp}<span className="text-sm text-zinc-500 ml-0.5">°C</span></p>
+              <p className="text-2xl font-semibold tracking-tight text-white">
+                {node.temp !== null ? node.temp : "---"}<span className="text-sm text-zinc-500 ml-0.5">°C</span>
+              </p>
             </div>
             
             <div className="space-y-1">
@@ -160,7 +162,9 @@ const NodeCard = ({
                 <Droplets className="h-3 w-3" />
                 <span className="text-[10px] font-semibold uppercase tracking-wider">Humidity</span>
               </div>
-              <p className="text-2xl font-semibold tracking-tight text-white">{node.hum}<span className="text-sm text-zinc-500 ml-0.5">%</span></p>
+              <p className="text-2xl font-semibold tracking-tight text-white">
+                {node.hum !== null ? node.hum : "---"}<span className="text-sm text-zinc-500 ml-0.5">%</span>
+              </p>
             </div>
 
             <div className="space-y-1">
@@ -453,7 +457,7 @@ export default function Dashboard() {
             </h2>
             <div className="h-[220px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={[...reports].reverse()}>
+                <AreaChart data={[...reports].filter(r => r.temp !== null && r.temp !== undefined).reverse()}>
                   <defs>
                     <linearGradient id="colorTemp" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/>
@@ -545,7 +549,10 @@ export default function Dashboard() {
                     </span>
                   </div>
                   <p className="text-[11px] text-zinc-300">
-                    Sensor payload received: <span className="text-zinc-500">{report.temp}°C / {report.hum}% RH</span>
+                    {report.type === "receiver" 
+                      ? `Gateway heart-beat received: RSSI ${report.rssi || '?' } dBm` 
+                      : `Sensor payload received: ${report.temp !== null ? `${report.temp}°C / ${report.hum}% RH` : "No telemetry data"}`
+                    }
                   </p>
                 </div>
               ))}
