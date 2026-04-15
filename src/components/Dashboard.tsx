@@ -21,7 +21,8 @@ import {
   Terminal,
   Settings,
   Save,
-  Loader2
+  Loader2,
+  Undo2
 } from "lucide-react";
 import { 
   XAxis, 
