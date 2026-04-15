@@ -18,7 +18,10 @@ import {
   WifiOff,
   Clock,
   Server,
-  Terminal
+  Terminal,
+  Settings,
+  Save,
+  Loader2
 } from "lucide-react";
 import { 
   XAxis, 
@@ -47,6 +50,7 @@ interface NodeReport {
   rssi?: number;
   edge_ai_class?: number;
   inserted_at: string;
+  mac_address?: string;
 }
 
 interface LogEntry {
@@ -68,11 +72,13 @@ const getRssiDisplay = (rssi?: number | null, isOnline?: boolean) => {
 interface NodeCardProps {
   node: NodeReport;
   isOnline: boolean;
+  deviceName?: string;
 }
 
 const NodeCard = ({ 
   node, 
-  isOnline
+  isOnline,
+  deviceName
 }: NodeCardProps) => {
   const rssiDisplay = getRssiDisplay(node.rssi, isOnline);
   const lastSeen = formatDistanceToNow(new Date(node.inserted_at), { addSuffix: true });
@@ -120,11 +126,16 @@ const NodeCard = ({
               {isReceiver ? "System Gateway" : "Device Unit"}
             </span>
             <h3 className="text-xl font-bold text-white leading-tight">
-              {isReceiver 
+              {deviceName || (isReceiver 
                 ? `Gateway ${String(node.node_id).replace(/[^0-9]/g, '') || node.node_id}`
-                : (typeof node.node_id === 'number' ? `Node ${String(node.node_id).padStart(2, '0')}` : node.node_id)
+                : (typeof node.node_id === 'number' ? `Node ${String(node.node_id).padStart(2, '0')}` : node.node_id))
               }
             </h3>
+            {node.mac_address && (
+              <span className="text-[9px] font-mono text-zinc-600 block mt-0.5">
+                MAC: {node.mac_address}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -250,13 +261,99 @@ const NodeCard = ({
   );
 };
 
+const DeviceRow = ({ mac, device, isUpdating, onUpdate }: { 
+  mac: string; 
+  device: any; 
+  isUpdating: boolean;
+  onUpdate: (mac: string, name: string, ssid?: string, password?: string) => Promise<void>;
+}) => {
+  const [name, setName] = useState(device.config?.name || "");
+  const [isEditing, setIsEditing] = useState(false);
+
+  return (
+    <tr className="hover:bg-white/5 transition-colors group">
+      <td className="py-4 px-2 font-mono text-zinc-400">{mac}</td>
+      <td className="py-4 px-2">
+        {isEditing ? (
+          <input 
+            type="text" 
+            value={name} 
+            onChange={(e) => setName(e.target.value)}
+            className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-white w-full focus:outline-none focus:border-emerald-500"
+          />
+        ) : (
+          <span className="text-white font-medium">{device.config?.name || "---"}</span>
+        )}
+      </td>
+      <td className="py-4 px-2">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-zinc-300">{device.config?.wifi?.ssid || "Not set"}</span>
+          {device.config?.wifi?.ssid && (
+            <span className="text-[9px] text-zinc-600 font-mono italic">Has password set</span>
+          )}
+        </div>
+      </td>
+      <td className="py-4 px-2 text-zinc-500">
+        {device.last_provision_request 
+          ? formatDistanceToNow(new Date(device.last_provision_request), { addSuffix: true }) 
+          : "Never"
+        }
+      </td>
+      <td className="py-4 px-2">
+        <div className="flex gap-2">
+          {isEditing ? (
+            <button 
+              onClick={async () => {
+                await onUpdate(mac, name);
+                setIsEditing(false);
+              }}
+              disabled={isUpdating}
+              className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/30 transition-all"
+            >
+              {isUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            </button>
+          ) : (
+            <button 
+              onClick={() => setIsEditing(true)}
+              className="p-1.5 rounded-md bg-zinc-800 text-zinc-400 hover:text-white transition-all opacity-0 group-hover:opacity-100"
+            >
+              <Settings className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+};
+
 export default function Dashboard() {
   const [reports, setReports] = useState<NodeReport[]>([]);
   const [nodes, setNodes] = useState<Record<string, NodeReport>>({});
+  const [deviceRegistry, setDeviceRegistry] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "error" | "reconnecting">("connecting");
   const [now, setNow] = useState(new Date());
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [updatingDevice, setUpdatingDevice] = useState<string | null>(null);
+
+  const handleUpdateDeviceConfig = async (macAddress: string, name: string, ssid?: string, password?: string) => {
+    setUpdatingDevice(macAddress);
+    try {
+      const config: any = { name };
+      if (ssid) config.wifi = { ssid, password: password || "" };
+
+      const res = await fetch("/api/provisioning/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mac_address: macAddress, config }),
+      });
+      if (!res.ok) throw new Error("Failed to update");
+    } catch (err) {
+      console.error("Update failed:", err);
+    } finally {
+      setUpdatingDevice(null);
+    }
+  };
 
   // Periodically update the "now" time to keep "Last Seen" and "Online" counts accurate
   useEffect(() => {
@@ -324,11 +421,20 @@ export default function Dashboard() {
       }
     });
 
+    // 4. Listen for device registry
+    const registryRef = ref(rtdb, "device_registry");
+    const unsubscribeRegistry = onValue(registryRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setDeviceRegistry(snapshot.val());
+      }
+    });
+
     return () => {
       unsubscribeConn();
       unsubscribeNodes();
       unsubscribeReports();
       unsubscribeLogs();
+      unsubscribeRegistry();
     };
   }, []); // Removed fetchAiPrediction dependency
 
@@ -419,11 +525,13 @@ export default function Dashboard() {
               {sensorNodes.length > 0 ? (
                 sensorNodes.map((node) => {
                   const isOnline = (now.getTime() - new Date(node.inserted_at).getTime()) < STALE_THRESHOLD;
+                  const registeredDevice = node.mac_address ? deviceRegistry[node.mac_address] : null;
                   return (
                     <NodeCard 
                       key={node.node_id} 
                       node={node} 
                       isOnline={isOnline}
+                      deviceName={registeredDevice?.config?.name}
                     />
                   );
                 })
@@ -447,11 +555,13 @@ export default function Dashboard() {
               {receiverNodes.length > 0 ? (
                 receiverNodes.map((node) => {
                   const isOnline = (now.getTime() - new Date(node.inserted_at).getTime()) < RECEIVER_STALE_THRESHOLD;
+                  const registeredDevice = node.mac_address ? deviceRegistry[node.mac_address] : null;
                   return (
                     <NodeCard 
                       key={node.node_id} 
                       node={node} 
                       isOnline={isOnline}
+                      deviceName={registeredDevice?.config?.name}
                     />
                   );
                 })
@@ -461,6 +571,48 @@ export default function Dashboard() {
                   <p className="text-xs text-zinc-600 uppercase tracking-widest font-bold">No receivers detected</p>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Provisioning Management Section */}
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+                <Settings className="h-4 w-4 text-emerald-500" /> Device Management & Provisioning
+              </h2>
+            </div>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/20 p-6">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-zinc-800 text-zinc-500 uppercase tracking-wider font-bold">
+                      <th className="pb-3 px-2">MAC Address</th>
+                      <th className="pb-3 px-2">Device Name</th>
+                      <th className="pb-3 px-2">Assigned WiFi</th>
+                      <th className="pb-3 px-2">Last Request</th>
+                      <th className="pb-3 px-2">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-800/50">
+                    {Object.entries(deviceRegistry).map(([mac, device]: [string, any]) => (
+                      <DeviceRow 
+                        key={mac} 
+                        mac={mac} 
+                        device={device} 
+                        isUpdating={updatingDevice === mac}
+                        onUpdate={handleUpdateDeviceConfig}
+                      />
+                    ))}
+                    {Object.keys(deviceRegistry).length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="py-10 text-center text-zinc-600 italic">
+                          No devices registered in the system yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>

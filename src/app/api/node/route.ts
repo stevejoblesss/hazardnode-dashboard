@@ -76,6 +76,7 @@ export async function POST(req: NextRequest) {
   const payload: any = {
     timestamp: parsedBody.data.timestamp ?? now,
     node_id: parsedBody.data.node_id ?? parsedBody.data.nodeID ?? "unknown",
+    mac_address: parsedBody.data.mac_address || null,
     type: type,
     inserted_at: new Date().toISOString()
   };
