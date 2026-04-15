@@ -269,6 +269,8 @@ const DeviceRow = ({ mac, device, isUpdating, onUpdate }: {
   onUpdate: (mac: string, name: string, ssid?: string, password?: string) => Promise<void>;
 }) => {
   const [name, setName] = useState(device.config?.name || "");
+  const [ssid, setSsid] = useState(device.config?.wifi?.ssid || "");
+  const [password, setPassword] = useState("");
   const [isEditing, setIsEditing] = useState(false);
 
   return (
@@ -279,6 +281,7 @@ const DeviceRow = ({ mac, device, isUpdating, onUpdate }: {
           <input 
             type="text" 
             value={name} 
+            placeholder="Device Name"
             onChange={(e) => setName(e.target.value)}
             className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-white w-full focus:outline-none focus:border-emerald-500"
           />
@@ -287,12 +290,31 @@ const DeviceRow = ({ mac, device, isUpdating, onUpdate }: {
         )}
       </td>
       <td className="py-4 px-2">
-        <div className="flex flex-col gap-0.5">
-          <span className="text-zinc-300">{device.config?.wifi?.ssid || "Not set"}</span>
-          {device.config?.wifi?.ssid && (
-            <span className="text-[9px] text-zinc-600 font-mono italic">Has password set</span>
-          )}
-        </div>
+        {isEditing ? (
+          <div className="flex flex-col gap-2">
+            <input 
+              type="text" 
+              value={ssid} 
+              placeholder="WiFi SSID"
+              onChange={(e) => setSsid(e.target.value)}
+              className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-white w-full focus:outline-none focus:border-emerald-500"
+            />
+            <input 
+              type="password" 
+              value={password} 
+              placeholder="New Password"
+              onChange={(e) => setPassword(e.target.value)}
+              className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-white w-full focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-0.5">
+            <span className="text-zinc-300">{device.config?.wifi?.ssid || "Not set"}</span>
+            {device.config?.wifi?.ssid && (
+              <span className="text-[9px] text-zinc-600 font-mono italic">Has password set</span>
+            )}
+          </div>
+        )}
       </td>
       <td className="py-4 px-2 text-zinc-500">
         {device.last_provision_request 
@@ -303,16 +325,30 @@ const DeviceRow = ({ mac, device, isUpdating, onUpdate }: {
       <td className="py-4 px-2">
         <div className="flex gap-2">
           {isEditing ? (
-            <button 
-              onClick={async () => {
-                await onUpdate(mac, name);
-                setIsEditing(false);
-              }}
-              disabled={isUpdating}
-              className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/30 transition-all"
-            >
-              {isUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            </button>
+            <>
+              <button 
+                onClick={async () => {
+                  await onUpdate(mac, name, ssid, password);
+                  setIsEditing(false);
+                  setPassword(""); // Clear local password state
+                }}
+                disabled={isUpdating}
+                className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/30 transition-all"
+              >
+                {isUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              </button>
+              <button 
+                onClick={() => {
+                  setIsEditing(false);
+                  setName(device.config?.name || "");
+                  setSsid(device.config?.wifi?.ssid || "");
+                  setPassword("");
+                }}
+                className="p-1.5 rounded-md bg-zinc-800 text-zinc-400 hover:text-white"
+              >
+                <Undo2 className="h-3.5 w-3.5" />
+              </button>
+            </>
           ) : (
             <button 
               onClick={() => setIsEditing(true)}
