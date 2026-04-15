@@ -51,6 +51,7 @@ interface NodeReport {
   edge_ai_class?: number;
   inserted_at: string;
   mac_address?: string;
+  custom_name?: string;
 }
 
 interface LogEntry {
@@ -126,7 +127,7 @@ const NodeCard = ({
               {isReceiver ? "System Gateway" : "Device Unit"}
             </span>
             <h3 className="text-xl font-bold text-white leading-tight">
-              {deviceName || (isReceiver 
+              {deviceName || node.custom_name || (isReceiver 
                 ? `Gateway ${String(node.node_id).replace(/[^0-9]/g, '') || node.node_id}`
                 : (typeof node.node_id === 'number' ? `Node ${String(node.node_id).padStart(2, '0')}` : node.node_id))
               }
@@ -457,8 +458,9 @@ export default function Dashboard() {
   const receiverNodes = activeNodes.filter(n => n.type === "receiver");
   
   // Staleness thresholds: 15s for standard nodes, 30s for receivers
-  const STALE_THRESHOLD = 15 * 1000; 
-  const RECEIVER_STALE_THRESHOLD = 30 * 1000;
+  // Use a 10s buffer to account for clock drift between server and client
+  const STALE_THRESHOLD = 15 * 1000 + 10000; 
+  const RECEIVER_STALE_THRESHOLD = 30 * 1000 + 10000;
 
   const onlineNodes = activeNodes.filter(n => {
     const lastSeenTime = new Date(n.inserted_at).getTime();

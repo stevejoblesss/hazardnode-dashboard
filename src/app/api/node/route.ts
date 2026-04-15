@@ -70,18 +70,36 @@ export async function POST(req: NextRequest) {
     }, { status: 400 });
   }
 
+  const mac_address = parsedBody.data.mac_address || null;
   const type = parsedBody.data.type || "sensor";
   
   // Construct payload based on node type
   const payload: any = {
     timestamp: parsedBody.data.timestamp ?? now,
     node_id: parsedBody.data.node_id ?? parsedBody.data.nodeID ?? "unknown",
-    mac_address: parsedBody.data.mac_address || null,
+    mac_address: mac_address,
     type: type,
     inserted_at: new Date().toISOString()
   };
 
-  if (type === "receiver") {
+  // 1. Try to fetch additional info from device registry if MAC exists
+  if (mac_address) {
+    try {
+      const registryRef = db.ref(`device_registry/${mac_address}`);
+      const snap = await registryRef.get();
+      if (snap.exists()) {
+        const regData = snap.val();
+        // Override type if registry has one
+        if (regData.type) payload.type = regData.type;
+        // Include the custom name in the payload so it's always available
+        if (regData.config?.name) payload.custom_name = regData.config.name;
+      }
+    } catch (err) {
+      console.warn(`⚠️ Failed to fetch registry info for ${mac_address}:`, err);
+    }
+  }
+
+  if (payload.type === "receiver") {
     // Receivers ONLY send RSSI - no sensor data to avoid "0" values in telemetry
     payload.rssi = parsedBody.data.rssi || null;
     // We explicitly omit or set sensor fields to null
@@ -138,7 +156,8 @@ export async function POST(req: NextRequest) {
     });
 
     // 3. Update the node's individual state for the dashboard summary
-    const nodeRef = db.ref(`nodes/${payload.node_id}`);
+    // Use MAC address as the key if available for better stability
+    const nodeRef = db.ref(`nodes/${payload.mac_address || payload.node_id}`);
     await nodeRef.update({
       latest: payload,
       last_seen: payload.timestamp,
