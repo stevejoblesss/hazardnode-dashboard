@@ -93,9 +93,22 @@ export async function POST(req: NextRequest) {
         if (regData.type) payload.type = regData.type;
         // Include the custom name in the payload so it's always available
         if (regData.config?.name) payload.custom_name = regData.config.name;
+      } else {
+        // Automatically register the device if it's new
+        await registryRef.set({
+          mac_address,
+          type: payload.type || "sensor",
+          registered_at: new Date().toISOString(),
+          last_provision_request: new Date().toISOString(),
+          status: "auto_registered",
+          config: {
+            name: `New Device (${mac_address.slice(-5)})`,
+            wifi: null
+          }
+        });
       }
     } catch (err) {
-      console.warn(`⚠️ Failed to fetch registry info for ${mac_address}:`, err);
+      console.warn(`⚠️ Failed to fetch/auto-register registry info for ${mac_address}:`, err);
     }
   }
 

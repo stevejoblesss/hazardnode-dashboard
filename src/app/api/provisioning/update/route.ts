@@ -12,6 +12,14 @@ export async function POST(req: NextRequest) {
     const deviceRef = db.ref(`device_registry/${mac_address}/config`);
     await deviceRef.update(config);
 
+    // Also update the active node's custom name in the nodes summary path so the change is immediate on the dashboard
+    if (config.name) {
+      const nodeSummaryRef = db.ref(`nodes/${mac_address}/latest`);
+      await nodeSummaryRef.update({
+        custom_name: config.name
+      });
+    }
+
     // Also update system logs
     await db.ref("system_logs").push().set({
       node_id: mac_address,

@@ -158,6 +158,22 @@ const NodeCard = ({
               </span>
             </div>
           </div>
+          {node.mac_address && (
+            <button 
+              onClick={() => {
+                const el = document.getElementById(`device-${node.mac_address}`);
+                if (el) {
+                  el.scrollIntoView({ behavior: 'smooth' });
+                  el.classList.add('bg-emerald-500/10');
+                  setTimeout(() => el.classList.remove('bg-emerald-500/10'), 3000);
+                }
+              }}
+              className="p-1.5 rounded-md bg-zinc-800/50 border border-zinc-700 text-zinc-500 hover:text-zinc-300 transition-all"
+              title="Manage Device"
+            >
+              <Settings className="h-3 w-3" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -275,7 +291,7 @@ const DeviceRow = ({ mac, device, isUpdating, onUpdate }: {
   const [isEditing, setIsEditing] = useState(false);
 
   return (
-    <tr className="hover:bg-white/5 transition-colors group">
+    <tr id={`device-${mac}`} className="hover:bg-white/5 transition-all group">
       <td className="py-4 px-2 font-mono text-zinc-400">{mac}</td>
       <td className="py-4 px-2">
         {isEditing ? (
