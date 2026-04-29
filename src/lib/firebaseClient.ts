@@ -12,8 +12,17 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
-// Initialize Firebase
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-const rtdb = getDatabase(app);
+// Initialize Firebase only if we have a Project ID to avoid build-time crashes
+let app;
+let rtdb: any;
+
+try {
+  if (typeof window !== "undefined" || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
+    app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+    rtdb = getDatabase(app);
+  }
+} catch (error) {
+  console.error("Firebase client initialization error:", error);
+}
 
 export { rtdb };

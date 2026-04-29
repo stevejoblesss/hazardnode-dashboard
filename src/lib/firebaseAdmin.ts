@@ -1,6 +1,6 @@
 import * as admin from "firebase-admin";
 
-if (!admin.apps.length) {
+if (!admin.apps.length && process.env.FIREBASE_PROJECT_ID) {
   try {
     admin.initializeApp({
       credential: admin.credential.cert({
@@ -15,5 +15,5 @@ if (!admin.apps.length) {
   }
 }
 
-const db = admin.database();
+const db = admin.apps.length ? admin.database() : null as any;
 export { db };
