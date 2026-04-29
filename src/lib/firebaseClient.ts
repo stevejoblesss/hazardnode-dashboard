@@ -2,14 +2,14 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import { getDatabase } from "firebase/database";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyC0GQiIGvuWuRsjOZoj5a6luO8gYCbG9fY",
-  authDomain: "hazardnode.firebaseapp.com",
-  databaseURL: "https://hazardnode-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "hazardnode",
-  storageBucket: "hazardnode.firebasestorage.app",
-  messagingSenderId: "657179073018",
-  appId: "1:657179073018:web:e145ee59d84efb05286c43",
-  measurementId: "G-Q4LSWXS9WG"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase

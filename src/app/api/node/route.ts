@@ -53,6 +53,64 @@ async function sendTelegramAlert(payload: any) {
   }
 }
 
+// China-Accessible & Global Alert Function
+async function sendExternalAlerts(payload: any) {
+  const larkWebhook = process.env.LARK_WEBHOOK_URL; // Feishu/Lark
+ 
+  const isTilt = Math.abs(payload.pitch) > 30 || Math.abs(payload.roll) > 30;
+  const isSmoke = payload.smoke_analog > 2000 || payload.smoke_digital;
+  const isDanger = payload.danger || payload.edge_ai_class === 2;
+  const isWarning = payload.edge_ai_class === 1;
+
+  if (!isTilt && !isSmoke && !isDanger && !isWarning) return;
+
+  const title = `🚨 HAZARD ALERT: Node ${payload.node_id} 🚨`;
+  let description = "";
+  if (isDanger) description += `🔴 **CRITICAL DANGER DETECTED!**\n`;
+  else if (isWarning) description += `🟠 **WARNING: ABNORMAL ACTIVITY**\n`;
+  
+  description += `\n🌡 **Temp:** ${payload.temp}°C | 💧 **Hum:** ${payload.hum}%\n`;
+  description += `💨 **Smoke:** ${payload.smoke_analog}\n`;
+  description += `📐 **Tilt:** P:${payload.pitch.toFixed(1)}° R:${payload.roll.toFixed(1)}°\n`;
+  description += `\n🔗 [Open Dashboard](https://hazardnode-dashboard.vercel.app)`;
+
+  // 2. Lark / Feishu (飞书) - Best China-accessible alternative, no KYC needed for bots
+  if (larkWebhook) {
+    try {
+      await fetch(larkWebhook, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          msg_type: "interactive",
+          card: {
+            header: {
+              title: { content: title, tag: "plain_text" },
+              template: isDanger ? "red" : (isWarning ? "orange" : "blue")
+            },
+            elements: [
+              {
+                tag: "div",
+                text: { content: description.replace(/\*\*/g, ""), tag: "lark_md" }
+              },
+              {
+                tag: "action",
+                actions: [{
+                  tag: "button",
+                  text: { content: "View Dashboard", tag: "plain_text" },
+                  url: "https://hazardnode-dashboard.vercel.app",
+                  type: "primary"
+                }]
+              }
+            ]
+          }
+        }),
+      });
+      console.log(`✅ Lark alert sent for Node ${payload.node_id}`);
+    } catch (err) {
+      console.error("❌ Failed to send Lark alert:", err);
+    }
+  }
+
 export async function POST(req: NextRequest) {
   const body = await req.json();
   console.log("📥 Incoming Telemetry:", JSON.stringify(body));
@@ -176,11 +234,14 @@ export async function POST(req: NextRequest) {
       last_seen: payload.timestamp,
     });
 
-    // 4. Send Telegram alert if necessary
+    // 4. Send Alerts (Telegram, WeChat, Discord)
     try {
-      await sendTelegramAlert(payload);
+      await Promise.allSettled([
+        sendTelegramAlert(payload),
+        sendExternalAlerts(payload)
+      ]);
     } catch (err) {
-      console.error("⚠️ Telegram background task error:", err);
+      console.error("⚠️ Alert background task error:", err);
     }
 
     return NextResponse.json({ success: true, id: newReportRef.key }, { status: 200 });
