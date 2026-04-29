@@ -5,8 +5,8 @@ import { db } from "@/lib/firebaseAdmin";
 
 // Telegram Alert Function
 async function sendTelegramAlert(payload: any) {
-  const botToken = "8648106308:AAF3iDhuALtQgfbvS2piU6e8rkZxdrGhfcw";
-  const chatId = "6907050517";
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
 
   if (!botToken || !chatId) {
     console.warn("⚠️ Telegram credentials missing. Skipping alert.");
@@ -53,9 +53,9 @@ async function sendTelegramAlert(payload: any) {
   }
 }
 
-// China-Accessible & Global Alert Function
-async function sendExternalAlerts(payload: any) {
-  const larkWebhook = process.env.LARK_WEBHOOK_URL; // Feishu/Lark
+// Feishu (Lark) Alert Function - China Accessible
+async function sendFeishuAlert(payload: any) {
+  const larkWebhook = process.env.LARK_WEBHOOK_URL; 
  
   const isTilt = Math.abs(payload.pitch) > 30 || Math.abs(payload.roll) > 30;
   const isSmoke = payload.smoke_analog > 2000 || payload.smoke_digital;
@@ -63,6 +63,11 @@ async function sendExternalAlerts(payload: any) {
   const isWarning = payload.edge_ai_class === 1;
 
   if (!isTilt && !isSmoke && !isDanger && !isWarning) return;
+
+  if (!larkWebhook) {
+    console.warn("⚠️ Lark/Feishu webhook missing. Skipping alert.");
+    return;
+  }
 
   const title = `🚨 HAZARD ALERT: Node ${payload.node_id} 🚨`;
   let description = "";
@@ -72,44 +77,41 @@ async function sendExternalAlerts(payload: any) {
   description += `\n🌡 **Temp:** ${payload.temp}°C | 💧 **Hum:** ${payload.hum}%\n`;
   description += `💨 **Smoke:** ${payload.smoke_analog}\n`;
   description += `📐 **Tilt:** P:${payload.pitch.toFixed(1)}° R:${payload.roll.toFixed(1)}°\n`;
-  description += `\n🔗 [Open Dashboard](https://hazardnode-dashboard.vercel.app)`;
 
-  // 2. Lark / Feishu (飞书) - Best China-accessible alternative, no KYC needed for bots
-  if (larkWebhook) {
-    try {
-      await fetch(larkWebhook, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          msg_type: "interactive",
-          card: {
-            header: {
-              title: { content: title, tag: "plain_text" },
-              template: isDanger ? "red" : (isWarning ? "orange" : "blue")
+  try {
+    await fetch(larkWebhook, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        msg_type: "interactive",
+        card: {
+          header: {
+            title: { content: title, tag: "plain_text" },
+            template: isDanger ? "red" : (isWarning ? "orange" : "blue")
+          },
+          elements: [
+            {
+              tag: "div",
+              text: { content: description.replace(/\*\*/g, ""), tag: "lark_md" }
             },
-            elements: [
-              {
-                tag: "div",
-                text: { content: description.replace(/\*\*/g, ""), tag: "lark_md" }
-              },
-              {
-                tag: "action",
-                actions: [{
-                  tag: "button",
-                  text: { content: "View Dashboard", tag: "plain_text" },
-                  url: "https://hazardnode-dashboard.vercel.app",
-                  type: "primary"
-                }]
-              }
-            ]
-          }
-        }),
-      });
-      console.log(`✅ Lark alert sent for Node ${payload.node_id}`);
-    } catch (err) {
-      console.error("❌ Failed to send Lark alert:", err);
-    }
+            {
+              tag: "action",
+              actions: [{
+                tag: "button",
+                text: { content: "View Dashboard", tag: "plain_text" },
+                url: "https://hazardnode-dashboard.vercel.app",
+                type: "primary"
+              }]
+            }
+          ]
+        }
+      }),
+    });
+    console.log(`✅ Feishu alert sent for Node ${payload.node_id}`);
+  } catch (err) {
+    console.error("❌ Failed to send Feishu alert:", err);
   }
+}
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -234,11 +236,11 @@ export async function POST(req: NextRequest) {
       last_seen: payload.timestamp,
     });
 
-    // 4. Send Alerts (Telegram, WeChat, Discord)
+    // 4. Send Alerts (Telegram & Feishu)
     try {
       await Promise.allSettled([
         sendTelegramAlert(payload),
-        sendExternalAlerts(payload)
+        sendFeishuAlert(payload)
       ]);
     } catch (err) {
       console.error("⚠️ Alert background task error:", err);
