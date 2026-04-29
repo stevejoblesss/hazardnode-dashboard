@@ -20,12 +20,13 @@ export const NodeRequestBody = z.object({
   rssi: z.number().optional(),
   edgeAIClass: z.number().min(0).max(2).optional(),
   edge_ai_class: z.number().min(0).max(2).optional(),
+  is_test: z.boolean().optional(),
 }).refine(data => {
   // 1. nodeID/node_id is always required to identify the source
   if (data.nodeID === undefined && data.node_id === undefined) return false;
 
   // 2. For receiver hubs, we don't require sensor data
-  if (data.type === "receiver") return true;
+  if (data.type === "receiver" || data.is_test === true) return true;
 
   // 3. For sensor/sender units, we require smoke sensor data at minimum
   const hasSmokeAnalog = data.smokeAnalog !== undefined || data.smoke_analog !== undefined;

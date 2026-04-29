@@ -62,10 +62,12 @@ async function sendFeishuAlert(payload: any) {
     return;
   }
 
-  // Auto-correct domain if user is using the wrong one for their region
-  // Some users copy open.larksuite.com but their bot is on open.feishu.cn
-  if (larkWebhook.includes("open.larksuite.com") && payload.region === "cn") {
-    larkWebhook = larkWebhook.replace("open.larksuite.com", "open.feishu.cn");
+  // Auto-correct domain if user is using the wrong one
+  // If we are in a China-based environment or using Feishu bot, we usually need open.feishu.cn
+  if (larkWebhook.includes("open.larksuite.com")) {
+    // We'll try the Feishu domain if LarkSuite fails or as a default if configured
+    // For now, let's log the attempt
+    console.log(`🔍 [Feishu Debug] Using LarkSuite domain. If this fails with 400, switch to open.feishu.cn`);
   }
 
   console.log(`🔍 [Feishu Debug] Checking alert for Node ${payload.node_id}. Webhook present: true`);
@@ -99,8 +101,9 @@ async function sendFeishuAlert(payload: any) {
   description += `💨 **Smoke:** ${payload.smoke_analog ?? 'N/A'}\n`;
   description += `📐 **Tilt:** P:${(payload.pitch || 0).toFixed(1)}° R:${(payload.roll || 0).toFixed(1)}°\n`;
 
-  try {
-    const response = await fetch(larkWebhook, {
+  // Helper to send request to Feishu/Lark
+  const postToWebhook = async (url: string) => {
+    return await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json; charset=utf-8" },
       body: JSON.stringify({
@@ -128,8 +131,23 @@ async function sendFeishuAlert(payload: any) {
         }
       }),
     });
-    
-    const result = await response.json();
+  };
+
+  try {
+    let response = await postToWebhook(larkWebhook);
+    let result = await response.json();
+
+    // If it's a domain error (common when switching between Lark and Feishu)
+    if (result.code === 19001 || result.msg?.includes("domain")) {
+      const fallbackUrl = larkWebhook.includes("larksuite.com") 
+        ? larkWebhook.replace("larksuite.com", "feishu.cn")
+        : larkWebhook.replace("feishu.cn", "larksuite.com");
+      
+      console.log(`🔄 [Feishu Debug] Domain mismatch detected. Retrying with fallback: ${fallbackUrl}`);
+      response = await postToWebhook(fallbackUrl);
+      result = await response.json();
+    }
+
     if (result.code !== 0) {
       console.error(`❌ Feishu API Error (${result.code}):`, result.msg);
     } else {
@@ -142,7 +160,7 @@ async function sendFeishuAlert(payload: any) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  console.log("📥 Incoming Telemetry:", JSON.stringify(body));
+  console.log("📥 Incoming Telemetry (Raw):", JSON.stringify(body));
   
   const parsedBody = NodeRequestBody.safeParse(body);
   const now = Date.now();
@@ -166,6 +184,7 @@ export async function POST(req: NextRequest) {
     node_id: parsedBody.data.node_id ?? parsedBody.data.nodeID ?? "unknown",
     mac_address: mac_address,
     type: type,
+    is_test: parsedBody.data.is_test || false,
     inserted_at: new Date().toISOString()
   };
 
