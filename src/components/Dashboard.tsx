@@ -416,6 +416,8 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
+    if (!rtdb) return;
+
     // Firebase handles connection state automatically. We'll listen to the special .info/connected path.
     const connectedRef = ref(rtdb, ".info/connected");
     const unsubscribeConn = onValue(connectedRef, (snap) => {
