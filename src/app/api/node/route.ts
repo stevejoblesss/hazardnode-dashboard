@@ -55,39 +55,54 @@ async function sendTelegramAlert(payload: any) {
 
 // Feishu (Lark) Alert Function - China Accessible
 async function sendFeishuAlert(payload: any) {
-  const larkWebhook = process.env.LARK_WEBHOOK_URL; 
-  console.log(`🔍 [Feishu Debug] Checking alert for Node ${payload.node_id}. Webhook present: ${!!larkWebhook}`);
- 
-  const isTilt = Math.abs(payload.pitch) > 30 || Math.abs(payload.roll) > 30;
-  const isSmoke = payload.smoke_analog > 2000 || payload.smoke_digital;
-  const isDanger = payload.danger || payload.edge_ai_class === 2;
-  const isWarning = payload.edge_ai_class === 1;
-
-  console.log(`🔍 [Feishu Debug] Conditions - Tilt: ${isTilt}, Smoke: ${isSmoke}, Danger: ${isDanger}, Warning: ${isWarning}`);
-
-  if (!isTilt && !isSmoke && !isDanger && !isWarning) {
-    console.log(`🔍 [Feishu Debug] No hazard detected. Skipping alert.`);
-    return;
-  }
-
+  let larkWebhook = process.env.LARK_WEBHOOK_URL; 
+  
   if (!larkWebhook) {
     console.warn("⚠️ Lark/Feishu webhook missing. Skipping alert.");
     return;
   }
 
-  const title = `🚨 HAZARD ALERT: Node ${payload.node_id} 🚨`;
+  // Auto-correct domain if user is using the wrong one for their region
+  // Some users copy open.larksuite.com but their bot is on open.feishu.cn
+  if (larkWebhook.includes("open.larksuite.com") && payload.region === "cn") {
+    larkWebhook = larkWebhook.replace("open.larksuite.com", "open.feishu.cn");
+  }
+
+  console.log(`🔍 [Feishu Debug] Checking alert for Node ${payload.node_id}. Webhook present: true`);
+ 
+  const isTilt = Math.abs(payload.pitch || 0) > 30 || Math.abs(payload.roll || 0) > 30;
+  const isSmoke = (payload.smoke_analog || 0) > 2000 || !!payload.smoke_digital;
+  const isDanger = !!payload.danger || payload.edge_ai_class === 2;
+  const isWarning = payload.edge_ai_class === 1;
+
+  console.log(`🔍 [Feishu Debug] Conditions - Tilt: ${isTilt}, Smoke: ${isSmoke}, Danger: ${isDanger}, Warning: ${isWarning}`);
+
+  // If this is a manual test or a real hazard
+  const isTest = payload.is_test === true;
+
+  if (!isTilt && !isSmoke && !isDanger && !isWarning && !isTest) {
+    console.log(`🔍 [Feishu Debug] No hazard detected. Skipping alert.`);
+    return;
+  }
+
+  const title = isTest ? `🧪 TEST ALERT: HazardNode Bot 🧪` : `🚨 HAZARD ALERT: Node ${payload.node_id} 🚨`;
   let description = "";
-  if (isDanger) description += `🔴 **CRITICAL DANGER DETECTED!**\n`;
-  else if (isWarning) description += `🟠 **WARNING: ABNORMAL ACTIVITY**\n`;
+  if (isTest) {
+    description += `✅ Bot is connected and working!\n`;
+  } else if (isDanger) {
+    description += `🔴 **CRITICAL DANGER DETECTED!**\n`;
+  } else if (isWarning) {
+    description += `🟠 **WARNING: ABNORMAL ACTIVITY**\n`;
+  }
   
-  description += `\n🌡 **Temp:** ${payload.temp}°C | 💧 **Hum:** ${payload.hum}%\n`;
-  description += `💨 **Smoke:** ${payload.smoke_analog}\n`;
-  description += `📐 **Tilt:** P:${payload.pitch.toFixed(1)}° R:${payload.roll.toFixed(1)}°\n`;
+  description += `\n🌡 **Temp:** ${payload.temp ?? 'N/A'}°C | 💧 **Hum:** ${payload.hum ?? 'N/A'}%\n`;
+  description += `💨 **Smoke:** ${payload.smoke_analog ?? 'N/A'}\n`;
+  description += `📐 **Tilt:** P:${(payload.pitch || 0).toFixed(1)}° R:${(payload.roll || 0).toFixed(1)}°\n`;
 
   try {
     const response = await fetch(larkWebhook, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json; charset=utf-8" },
       body: JSON.stringify({
         msg_type: "interactive",
         card: {
@@ -98,13 +113,13 @@ async function sendFeishuAlert(payload: any) {
           elements: [
             {
               tag: "div",
-              text: { content: description.replace(/\*\*/g, ""), tag: "lark_md" }
+              text: { content: description, tag: "lark_md" }
             },
             {
               tag: "action",
               actions: [{
                 tag: "button",
-                text: { content: "View Dashboard", tag: "plain_text" },
+                text: { content: "Open Dashboard", tag: "plain_text" },
                 url: "https://hazardnode-dashboard.vercel.app",
                 type: "primary"
               }]
@@ -115,7 +130,11 @@ async function sendFeishuAlert(payload: any) {
     });
     
     const result = await response.json();
-    console.log(`✅ Feishu response:`, JSON.stringify(result));
+    if (result.code !== 0) {
+      console.error(`❌ Feishu API Error (${result.code}):`, result.msg);
+    } else {
+      console.log(`✅ Feishu alert sent successfully for Node ${payload.node_id}`);
+    }
   } catch (err) {
     console.error("❌ Failed to send Feishu alert:", err);
   }
