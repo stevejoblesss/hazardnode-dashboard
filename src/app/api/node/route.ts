@@ -56,13 +56,19 @@ async function sendTelegramAlert(payload: any) {
 // Feishu (Lark) Alert Function - China Accessible
 async function sendFeishuAlert(payload: any) {
   const larkWebhook = process.env.LARK_WEBHOOK_URL; 
+  console.log(`🔍 [Feishu Debug] Checking alert for Node ${payload.node_id}. Webhook present: ${!!larkWebhook}`);
  
   const isTilt = Math.abs(payload.pitch) > 30 || Math.abs(payload.roll) > 30;
   const isSmoke = payload.smoke_analog > 2000 || payload.smoke_digital;
   const isDanger = payload.danger || payload.edge_ai_class === 2;
   const isWarning = payload.edge_ai_class === 1;
 
-  if (!isTilt && !isSmoke && !isDanger && !isWarning) return;
+  console.log(`🔍 [Feishu Debug] Conditions - Tilt: ${isTilt}, Smoke: ${isSmoke}, Danger: ${isDanger}, Warning: ${isWarning}`);
+
+  if (!isTilt && !isSmoke && !isDanger && !isWarning) {
+    console.log(`🔍 [Feishu Debug] No hazard detected. Skipping alert.`);
+    return;
+  }
 
   if (!larkWebhook) {
     console.warn("⚠️ Lark/Feishu webhook missing. Skipping alert.");
@@ -79,7 +85,7 @@ async function sendFeishuAlert(payload: any) {
   description += `📐 **Tilt:** P:${payload.pitch.toFixed(1)}° R:${payload.roll.toFixed(1)}°\n`;
 
   try {
-    await fetch(larkWebhook, {
+    const response = await fetch(larkWebhook, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -107,7 +113,9 @@ async function sendFeishuAlert(payload: any) {
         }
       }),
     });
-    console.log(`✅ Feishu alert sent for Node ${payload.node_id}`);
+    
+    const result = await response.json();
+    console.log(`✅ Feishu response:`, JSON.stringify(result));
   } catch (err) {
     console.error("❌ Failed to send Feishu alert:", err);
   }
