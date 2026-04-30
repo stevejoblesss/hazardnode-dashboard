@@ -8,37 +8,50 @@ async function sendTelegramAlert(payload: any) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
 
+  console.log(`🔍 [Telegram Debug] Checking alert for Node ${payload.node_id}. Credentials present: ${!!(botToken && chatId)}`);
+
   if (!botToken || !chatId) {
     console.warn("⚠️ Telegram credentials missing. Skipping alert.");
     return;
   }
 
-  const isTilt = Math.abs(payload.pitch) > 30 || Math.abs(payload.roll) > 30;
-  const isSmoke = payload.smoke_analog > 2000 || payload.smoke_digital;
-  const isDanger = payload.danger || payload.edge_ai_class === 2;
+  const isTilt = Math.abs(payload.pitch || 0) > 30 || Math.abs(payload.roll || 0) > 30;
+  const isSmoke = (payload.smoke_analog || 0) > 2000 || !!payload.smoke_digital;
+  const isDanger = !!payload.danger || payload.edge_ai_class === 2;
   const isWarning = payload.edge_ai_class === 1;
+  const isTest = payload.is_test === true;
 
-  if (!isTilt && !isSmoke && !isDanger && !isWarning) return;
+  console.log(`🔍 [Telegram Debug] Conditions - Tilt: ${isTilt}, Smoke: ${isSmoke}, Danger: ${isDanger}, Warning: ${isWarning}, Test: ${isTest}`);
 
-  let message = `🚨 *HAZARD ALERT: Node ${payload.node_id}* 🚨\n\n`;
+  if (!isTilt && !isSmoke && !isDanger && !isWarning && !isTest) {
+    console.log(`🔍 [Telegram Debug] No hazard detected. Skipping alert.`);
+    return;
+  }
+
+  let message = isTest 
+    ? `🧪 *TEST ALERT: HazardNode Bot* 🧪\n\n✅ Telegram connection is working!`
+    : `🚨 *HAZARD ALERT: Node ${payload.node_id}* 🚨\n\n`;
   
-  if (isDanger) message += `🔴 *CRITICAL DANGER DETECTED!*\n`;
-  else if (isWarning) message += `🟠 *WARNING: ABNORMAL ACTIVITY*\n`;
+  if (!isTest) {
+    if (isDanger) message += `🔴 *CRITICAL DANGER DETECTED!*\n`;
+    else if (isWarning) message += `🟠 *WARNING: ABNORMAL ACTIVITY*\n`;
 
-  if (payload.edge_ai_class !== undefined) {
-    const labels = ["NORMAL", "WARNING", "HAZARD"];
-    message += `🧠 *Edge AI:* ${labels[payload.edge_ai_class]}\n`;
+    if (payload.edge_ai_class !== undefined) {
+      const labels = ["NORMAL", "WARNING", "HAZARD"];
+      message += `🧠 *Edge AI:* ${labels[payload.edge_ai_class]}\n`;
+    }
+    
+    if (isSmoke) message += `💨 *SMOKE/GAS DETECTED:* ${payload.smoke_analog}\n`;
+    if (isTilt) message += `📐 *TILT DETECTED:* P:${(payload.pitch || 0).toFixed(1)}° R:${(payload.roll || 0).toFixed(1)}°\n`;
+    
+    message += `\n🌡 Temp: ${payload.temp ?? 'N/A'}°C | 💧 Hum: ${payload.hum ?? 'N/A'}%\n`;
+    message += `📡 Signal: ${payload.rssi || 'N/A'} dBm\n`;
   }
   
-  if (isSmoke) message += `💨 *SMOKE/GAS DETECTED:* ${payload.smoke_analog}\n`;
-  if (isTilt) message += `📐 *TILT DETECTED:* P:${payload.pitch.toFixed(1)}° R:${payload.roll.toFixed(1)}°\n`;
-  
-  message += `\n🌡 Temp: ${payload.temp}°C | 💧 Hum: ${payload.hum}%\n`;
-  message += `📡 Signal: ${payload.rssi || 'N/A'} dBm\n`;
   message += `\n🔗 [Open Dashboard](https://hazardnode-dashboard.vercel.app)`;
 
   try {
-    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -47,7 +60,12 @@ async function sendTelegramAlert(payload: any) {
         parse_mode: "Markdown",
       }),
     });
-    console.log(`✅ Telegram alert sent for Node ${payload.node_id}`);
+    const result = await response.json();
+    if (result.ok) {
+      console.log(`✅ Telegram alert sent for Node ${payload.node_id}`);
+    } else {
+      console.error(`❌ Telegram API Error:`, JSON.stringify(result));
+    }
   } catch (err) {
     console.error("❌ Failed to send Telegram alert:", err);
   }
@@ -189,7 +207,7 @@ export async function POST(req: NextRequest) {
   };
 
   // 1. Try to fetch additional info from device registry if MAC exists
-  if (mac_address) {
+  if (mac_address && db) {
     try {
       const registryRef = db.ref(`device_registry/${mac_address}`);
       const snap = await registryRef.get();
@@ -256,43 +274,47 @@ export async function POST(req: NextRequest) {
 
   try {
     // 1. Save to historical reports list
-    const reportsRef = db.ref("node_reports");
-    const newReportRef = reportsRef.push();
-    await newReportRef.set(payload);
+    if (db) {
+      try {
+        const reportsRef = db.ref("node_reports");
+        const newReportRef = reportsRef.push();
+        await newReportRef.set(payload);
 
-    // 2. Add to System Logs (Serial Monitor)
-    const logsRef = db.ref("system_logs");
-    const newLogRef = logsRef.push();
-    const logMessage = type === "receiver" 
-      ? `Gateway signal check: RSSI ${payload.rssi || '?' } dBm`
-      : `Telemetry received: ${payload.temp !== null ? `T:${payload.temp}°C H:${payload.hum}%` : "No telemetry data"}${payload.rssi !== null ? ` R:${payload.rssi}` : ""}`;
-    
-    await newLogRef.set({
-      node_id: payload.node_id,
-      message: logMessage,
-      timestamp: payload.inserted_at,
-      type: payload.danger ? "error" : payload.edge_ai_class > 0 ? "warn" : "info"
-    });
+        // 2. Add to System Logs (Serial Monitor)
+        const logsRef = db.ref("system_logs");
+        const newLogRef = logsRef.push();
+        const logMessage = type === "receiver" 
+          ? `Gateway signal check: RSSI ${payload.rssi || '?' } dBm`
+          : `Telemetry received: ${payload.temp !== null ? `T:${payload.temp}°C H:${payload.hum}%` : "No telemetry data"}${payload.rssi !== null ? ` R:${payload.rssi}` : ""}`;
+        
+        await newLogRef.set({
+          node_id: payload.node_id,
+          message: logMessage,
+          timestamp: payload.inserted_at,
+          type: payload.danger ? "error" : payload.edge_ai_class > 0 ? "warn" : "info"
+        });
 
-    // 3. Update the node's individual state for the dashboard summary
-    // Use MAC address as the key if available for better stability
-    const nodeRef = db.ref(`nodes/${payload.mac_address || payload.node_id}`);
-    await nodeRef.update({
-      latest: payload,
-      last_seen: payload.timestamp,
-    });
-
-    // 4. Send Alerts (Telegram & Feishu)
-    try {
-      await Promise.allSettled([
-        sendTelegramAlert(payload),
-        sendFeishuAlert(payload)
-      ]);
-    } catch (err) {
-      console.error("⚠️ Alert background task error:", err);
+        // 3. Update the node's individual state for the dashboard summary
+        const nodeRef = db.ref(`nodes/${payload.mac_address || payload.node_id}`);
+        await nodeRef.update({
+          latest: payload,
+          last_seen: payload.timestamp,
+        });
+      } catch (firebaseErr) {
+        console.error("⚠️ Firebase update error:", firebaseErr);
+      }
+    } else {
+      console.warn("⚠️ Firebase DB not initialized. Skipping database updates.");
     }
 
-    return NextResponse.json({ success: true, id: newReportRef.key }, { status: 200 });
+    // 4. Send Alerts (Telegram & Feishu)
+    // We do this outside the main DB try-catch to ensure alerts go out even if DB is slow/fails
+    await Promise.allSettled([
+      sendTelegramAlert(payload),
+      sendFeishuAlert(payload)
+    ]);
+
+    return NextResponse.json({ success: true }, { status: 200 });
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : "Unknown error";
     console.error("❌ Unexpected server error in /api/node:", errorMessage);
