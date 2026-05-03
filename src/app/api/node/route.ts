@@ -69,7 +69,7 @@ async function sendFeishuAlert(payload: any) {
   text += `\n🌡 温度: ${payload.temp ?? 'N/A'}°C | 💧 湿度: ${payload.hum ?? 'N/A'}%\n`;
   text += `💨 烟雾浓度: ${payload.smoke_analog ?? 'N/A'}\n`;
   text += `📐 倾斜角度: P:${(payload.pitch || 0).toFixed(1)}° R:${(payload.roll || 0).toFixed(1)}°\n`;
-  text += `\n🔗 查看信息显示板: https://hazardnode-dashboard.vercel.app`;
+  text += `\n🔗 查看仪表板: https://hazardnode-dashboard.vercel.app`;
 
   try {
     const response = await fetch(larkWebhook, {
