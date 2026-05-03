@@ -61,15 +61,15 @@ async function sendFeishuAlert(payload: any) {
 
   if (!isTilt && !isSmoke && !isDanger && !isWarning && !isTest) return;
 
-  let text = `🚨 HAZARD ALERT: Node ${payload.node_id} 🚨\n`;
-  if (isTest) text = `🧪 TEST ALERT: HazardNode Bot is working! 🚀\n`;
-  else if (isDanger) text += `🔴 CRITICAL DANGER DETECTED!\n`;
-  else if (isWarning) text += `🟠 WARNING: ABNORMAL ACTIVITY\n`;
+  let text = `🚨 危险警报: 节点 ${payload.node_id} 🚨\n`;
+  if (isTest) text = `🧪 测试警报: HazardNode 机器人运行正常! 🚀\n`;
+  else if (isDanger) text += `🔴 检测到严重危险!\n`;
+  else if (isWarning) text += `🟠 警告: 异常活动\n`;
 
-  text += `\n🌡 Temp: ${payload.temp ?? 'N/A'}°C | 💧 Hum: ${payload.hum ?? 'N/A'}%\n`;
-  text += `💨 Smoke: ${payload.smoke_analog ?? 'N/A'}\n`;
-  text += `📐 Tilt: P:${(payload.pitch || 0).toFixed(1)}° R:${(payload.roll || 0).toFixed(1)}°\n`;
-  text += `\n🔗 View Dashboard: https://hazardnode-dashboard.vercel.app`;
+  text += `\n🌡 温度: ${payload.temp ?? 'N/A'}°C | 💧 湿度: ${payload.hum ?? 'N/A'}%\n`;
+  text += `💨 烟雾浓度: ${payload.smoke_analog ?? 'N/A'}\n`;
+  text += `📐 倾斜角度: P:${(payload.pitch || 0).toFixed(1)}° R:${(payload.roll || 0).toFixed(1)}°\n`;
+  text += `\n🔗 查看信息显示板: https://hazardnode-dashboard.vercel.app`;
 
   try {
     const response = await fetch(larkWebhook, {
