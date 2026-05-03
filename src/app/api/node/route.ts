@@ -48,102 +48,41 @@ async function sendTelegramAlert(payload: any) {
   }
 }
 
-/*
 // Feishu (Lark) Alert Function - China Accessible
 async function sendFeishuAlert(payload: any) {
-  let larkWebhook = process.env.LARK_WEBHOOK_URL; 
+  // Use the working URL provided by the user
+  const larkWebhook = "https://open.larksuite.com/open-apis/bot/v2/hook/d72aacd1-0878-42a7-9eb1-c4f6f41bc22b";
   
-  if (!larkWebhook) {
-    console.warn("⚠️ Lark/Feishu webhook missing. Skipping alert.");
-    return;
-  }
-
-  // Auto-correct domain if user is using the wrong one
-  // If we are in a China-based environment or using Feishu bot, we usually need open.feishu.cn
-  if (larkWebhook.includes("open.larksuite.com")) {
-    // We'll try the Feishu domain if LarkSuite fails or as a default if configured
-    // For now, let's log the attempt
-    console.log(`🔍 [Feishu Debug] Using LarkSuite domain. If this fails with 400, switch to open.feishu.cn`);
-  }
-
-  console.log(`🔍 [Feishu Debug] Checking alert for Node ${payload.node_id}. Webhook present: true`);
- 
   const isTilt = Math.abs(payload.pitch || 0) > 30 || Math.abs(payload.roll || 0) > 30;
   const isSmoke = (payload.smoke_analog || 0) > 2000 || !!payload.smoke_digital;
   const isDanger = !!payload.danger || payload.edge_ai_class === 2;
   const isWarning = payload.edge_ai_class === 1;
-
-  console.log(`🔍 [Feishu Debug] Conditions - Tilt: ${isTilt}, Smoke: ${isSmoke}, Danger: ${isDanger}, Warning: ${isWarning}`);
-
-  // If this is a manual test or a real hazard
   const isTest = payload.is_test === true;
 
-  if (!isTilt && !isSmoke && !isDanger && !isWarning && !isTest) {
-    console.log(`🔍 [Feishu Debug] No hazard detected. Skipping alert.`);
-    return;
-  }
+  if (!isTilt && !isSmoke && !isDanger && !isWarning && !isTest) return;
 
-  const title = isTest ? `🧪 TEST ALERT: HazardNode Bot 🧪` : `🚨 HAZARD ALERT: Node ${payload.node_id} 🚨`;
-  let description = "";
-  if (isTest) {
-    description += `✅ Bot is connected and working!\n`;
-  } else if (isDanger) {
-    description += `🔴 **CRITICAL DANGER DETECTED!**\n`;
-  } else if (isWarning) {
-    description += `🟠 **WARNING: ABNORMAL ACTIVITY**\n`;
-  }
-  
-  description += `\n🌡 **Temp:** ${payload.temp ?? 'N/A'}°C | 💧 **Hum:** ${payload.hum ?? 'N/A'}%\n`;
-  description += `💨 **Smoke:** ${payload.smoke_analog ?? 'N/A'}\n`;
-  description += `📐 **Tilt:** P:${(payload.pitch || 0).toFixed(1)}° R:${(payload.roll || 0).toFixed(1)}°\n`;
+  let text = `🚨 HAZARD ALERT: Node ${payload.node_id} 🚨\n`;
+  if (isTest) text = `🧪 TEST ALERT: HazardNode Bot is working! 🚀\n`;
+  else if (isDanger) text += `🔴 CRITICAL DANGER DETECTED!\n`;
+  else if (isWarning) text += `🟠 WARNING: ABNORMAL ACTIVITY\n`;
 
-  // Helper to send request to Feishu/Lark
-  const postToWebhook = async (url: string) => {
-    return await fetch(url, {
+  text += `\n🌡 Temp: ${payload.temp ?? 'N/A'}°C | 💧 Hum: ${payload.hum ?? 'N/A'}%\n`;
+  text += `💨 Smoke: ${payload.smoke_analog ?? 'N/A'}\n`;
+  text += `📐 Tilt: P:${(payload.pitch || 0).toFixed(1)}° R:${(payload.roll || 0).toFixed(1)}°\n`;
+  text += `\n🔗 View Dashboard: https://hazardnode-dashboard.vercel.app`;
+
+  try {
+    const response = await fetch(larkWebhook, {
       method: "POST",
-      headers: { "Content-Type": "application/json; charset=utf-8" },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        msg_type: "interactive",
-        card: {
-          header: {
-            title: { content: title, tag: "plain_text" },
-            template: isDanger ? "red" : (isWarning ? "orange" : "blue")
-          },
-          elements: [
-            {
-              tag: "div",
-              text: { content: description, tag: "lark_md" }
-            },
-            {
-              tag: "action",
-              actions: [{
-                tag: "button",
-                text: { content: "Open Dashboard", tag: "plain_text" },
-                url: "https://hazardnode-dashboard.vercel.app",
-                type: "primary"
-              }]
-            }
-          ]
+        msg_type: "text",
+        content: {
+          text: text
         }
       }),
     });
-  };
-
-  try {
-    let response = await postToWebhook(larkWebhook);
-    let result = await response.json();
-
-    // If it's a domain error (common when switching between Lark and Feishu)
-    if (result.code === 19001 || result.msg?.includes("domain")) {
-      const fallbackUrl = larkWebhook.includes("larksuite.com") 
-        ? larkWebhook.replace("larksuite.com", "feishu.cn")
-        : larkWebhook.replace("feishu.cn", "larksuite.com");
-      
-      console.log(`🔄 [Feishu Debug] Domain mismatch detected. Retrying with fallback: ${fallbackUrl}`);
-      response = await postToWebhook(fallbackUrl);
-      result = await response.json();
-    }
-
+    const result = await response.json();
     if (result.code !== 0) {
       console.error(`❌ Feishu API Error (${result.code}):`, result.msg);
     } else {
@@ -153,7 +92,6 @@ async function sendFeishuAlert(payload: any) {
     console.error("❌ Failed to send Feishu alert:", err);
   }
 }
-*/
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -279,10 +217,10 @@ export async function POST(req: NextRequest) {
       last_seen: payload.timestamp,
     });
 
-    // 4. Send Alerts (Telegram only for now)
+    // 4. Send Alerts
     try {
       await sendTelegramAlert(payload);
-      // await sendFeishuAlert(payload);
+      await sendFeishuAlert(payload);
     } catch (err) {
       console.error("⚠️ Alert background task error:", err);
     }

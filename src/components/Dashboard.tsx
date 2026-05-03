@@ -389,6 +389,38 @@ export default function Dashboard() {
   const [now, setNow] = useState(new Date());
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [updatingDevice, setUpdatingDevice] = useState<string | null>(null);
+  const [isTestingAlert, setIsTestingAlert] = useState(false);
+
+  const sendTestAlert = async () => {
+    setIsTestingAlert(true);
+    try {
+      const res = await fetch("/api/node", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          node_id: "DASHBOARD_TEST",
+          temp: 25.5,
+          hum: 60,
+          pitch: 0,
+          roll: 0,
+          smoke_analog: 450,
+          smoke_digital: false,
+          danger: false,
+          is_test: true
+        }),
+      });
+      if (res.ok) {
+        alert("✅ Test alert sent! Check your Telegram and Feishu.");
+      } else {
+        throw new Error("Failed to send test alert");
+      }
+    } catch (err) {
+      console.error("Test alert failed:", err);
+      alert("❌ Failed to send test alert.");
+    } finally {
+      setIsTestingAlert(false);
+    }
+  };
 
   const handleUpdateDeviceConfig = async (macAddress: string, name: string, ssid?: string, password?: string) => {
     setUpdatingDevice(macAddress);
@@ -550,6 +582,14 @@ export default function Dashboard() {
         </div>
         
         <div className="flex items-center gap-3">
+          <button
+            onClick={sendTestAlert}
+            disabled={isTestingAlert}
+            className="flex items-center gap-2 rounded-md bg-zinc-900 border border-zinc-800 hover:border-blue-500/50 hover:bg-blue-500/5 px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-blue-400 transition-all shadow-subtle disabled:opacity-50"
+          >
+            {isTestingAlert ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+            TEST ALERTS
+          </button>
           <div className={cn(
             "flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold shadow-subtle border transition-colors duration-500",
             dangerNodes.length > 0 
