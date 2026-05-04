@@ -666,10 +666,11 @@ export default function Dashboard() {
   const sensorNodes = activeNodes.filter(n => !n.type || n.type === "sensor" || n.type === "sender");
   const receiverNodes = activeNodes.filter(n => n.type === "receiver");
   
-  // Staleness thresholds: 15s for standard nodes, 30s for receivers
+  // Staleness thresholds: 60s for standard nodes, 120s for receivers
+  // Increased from 15s/30s to prevent flickering offline status
   // Use a 10s buffer to account for clock drift between server and client
-  const STALE_THRESHOLD = 15 * 1000 + 10000; 
-  const RECEIVER_STALE_THRESHOLD = 30 * 1000 + 10000;
+  const STALE_THRESHOLD = 60 * 1000 + 10000; 
+  const RECEIVER_STALE_THRESHOLD = 120 * 1000 + 10000;
 
   const onlineNodes = activeNodes.filter(n => {
     const lastSeenTime = new Date(n.inserted_at).getTime();
